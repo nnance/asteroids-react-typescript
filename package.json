@@ -1,0 +1,25 @@
+{
+  "name": "astroids",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "parcel index.html",
+    "build": "parcel build index.html",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/react": "^16.9.34",
+    "@types/react-bootstrap": "^1.0.0",
+    "@types/react-dom": "^16.9.6",
+    "bootstrap": "^4.4.1",
+    "parcel-bundler": "^1.12.4",
+    "react": "^16.13.1",
+    "react-bootstrap": "^1.0.0",
+    "react-dom": "^16.13.1",
+    "typescript": "^3.8.3"
+  }
+}
