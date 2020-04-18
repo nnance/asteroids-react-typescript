@@ -5,6 +5,15 @@ import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 
+type Laser = {
+  x: number;
+  y: number;
+  xVelocity: number;
+  yVelocity: number;
+  distTravelled: number;
+  explodeTime: number;
+};
+
 type Ship = {
   x: number;
   y: number;
@@ -20,7 +29,7 @@ type Ship = {
   blinkTime: number;
   blinkNum: number;
   canShoot: boolean;
-  lasers: [];
+  lasers: Laser[];
   dead: boolean;
 };
 
@@ -34,6 +43,8 @@ enum GameActions {
   rotateStop,
   thrustOn,
   thrustStop,
+  shootLaser,
+  enableLaser,
   gameLoop,
 }
 
@@ -54,6 +65,10 @@ const SHIP_EXPLODE_DURATION = 0.3;
 const SHIP_INVINCIBLE_DURATION = 3;
 const SHIP_BLINK_DURATION = 0.1;
 const SHOW_BOUNDING = false;
+const LASER_MAX = 10;
+const LASER_SPEED = 500; // pixels per second
+const LASER_DIST = 0.6; // fraction of screen width
+const LASER_EXPLODE_DURATION = 0.1;
 
 const createShip = (): Ship => ({
   x: CANVAS.width / 2,
@@ -72,6 +87,15 @@ const createShip = (): Ship => ({
   canShoot: true,
   lasers: [],
   dead: false,
+});
+
+const createLaser = ({ ship }: GameState): Laser => ({
+  x: ship.x + (4 / 3) * ship.radius * Math.cos(ship.angle),
+  y: ship.y - (4 / 3) * ship.radius * Math.sin(ship.angle),
+  xVelocity: (LASER_SPEED * Math.cos(ship.angle)) / FPS,
+  yVelocity: (-LASER_SPEED * Math.sin(ship.angle)) / FPS,
+  distTravelled: 0,
+  explodeTime: 0,
 });
 
 const createGameState = (): GameState => ({
@@ -112,37 +136,54 @@ const drawShip = (
   }
 };
 
+const drawLasers = (ctx: CanvasRenderingContext2D, { ship }: GameState) => {
+  // draw laser
+  ship.lasers.forEach(({ x, y, explodeTime }) => {
+    if (explodeTime === 0) {
+      ctx.fillStyle = "salmon";
+      ctx.beginPath();
+      ctx.arc(x, y, SHIP_SIZE / 15, 0, Math.PI * 2, false);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "orangered";
+      ctx.beginPath();
+      ctx.arc(x, y, ship.radius * 0.75, 0, Math.PI * 2, false);
+      ctx.fill();
+      ctx.fillStyle = "salmon";
+      ctx.beginPath();
+      ctx.arc(x, y, ship.radius * 0.5, 0, Math.PI * 2, false);
+      ctx.fill();
+      ctx.fillStyle = "pink";
+      ctx.beginPath();
+      ctx.arc(x, y, ship.radius * 0.25, 0, Math.PI * 2, false);
+      ctx.fill();
+    }
+  });
+};
+
 const drawBoard = (ctx: CanvasRenderingContext2D, state: GameState) => {
   // space
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, CANVAS.width, CANVAS.height);
 
   drawShip(ctx, state.ship);
+  drawLasers(ctx, state);
 };
 
-const rotateLeft = (state: GameState): GameState => {
-  const { ship } = state;
-  return {
-    ...state,
-    ship: { ...ship, rotation: ((TURN_SPEED / 180) * Math.PI) / FPS },
-  };
-};
+const rotateLeft = (state: GameState): GameState => ({
+  ...state,
+  ship: { ...state.ship, rotation: ((TURN_SPEED / 180) * Math.PI) / FPS },
+});
 
-const rotateRight = (state: GameState): GameState => {
-  const { ship } = state;
-  return {
-    ...state,
-    ship: { ...ship, rotation: ((-TURN_SPEED / 180) * Math.PI) / FPS },
-  };
-};
+const rotateRight = (state: GameState): GameState => ({
+  ...state,
+  ship: { ...state.ship, rotation: ((-TURN_SPEED / 180) * Math.PI) / FPS },
+});
 
-const rotateStop = (state: GameState): GameState => {
-  const { ship } = state;
-  return {
-    ...state,
-    ship: { ...ship, rotation: 0 },
-  };
-};
+const rotateStop = (state: GameState): GameState => ({
+  ...state,
+  ship: { ...state.ship, rotation: 0 },
+});
 
 const thrustOn = (state: GameState): GameState => ({
   ...state,
@@ -152,6 +193,22 @@ const thrustOn = (state: GameState): GameState => ({
 const thrustStop = (state: GameState): GameState => ({
   ...state,
   ship: { ...state.ship, thrusting: false },
+});
+
+const shootLaser = (state: GameState): GameState => ({
+  ...state,
+  ship: state.ship.canShoot
+    ? {
+        ...state.ship,
+        lasers: state.ship.lasers.concat(createLaser(state)),
+        canShoot: false,
+      }
+    : { ...state.ship },
+});
+
+const enableLaser = (state: GameState): GameState => ({
+  ...state,
+  ship: { ...state.ship, canShoot: true },
 });
 
 const moveShip = (state: GameState): GameState => {
@@ -177,8 +234,34 @@ const moveShip = (state: GameState): GameState => {
   };
 };
 
+const moveLasers = (state: GameState): GameState => {
+  const {ship} = state;
+  
+  // if laser is off the board remove it from the array otherwise move it
+  const moveIfOnBoard = (prev: Laser[], {x, y, ...laser}: Laser): Laser[] => {
+    return x < 0 || x > CANVAS.width || y < 0 || y > CANVAS.height
+      ? prev
+      : prev.concat({
+          ...laser,
+          x: x + laser.xVelocity,
+          y: y + laser.yVelocity,
+        });
+  };
+
+  return {
+    ...state,
+    ship: {
+      ...ship,
+      lasers: ship.lasers.reduce(moveIfOnBoard, []),
+    },
+  };
+};
+
 const gameLoop = (state: GameState): GameState => {
-  return [moveShip].reduce((prev, transducer) => transducer(prev), state);
+  return [moveShip, moveLasers].reduce(
+    (prev, transducer) => transducer(prev),
+    state
+  );
 };
 
 const reducer: GameReducer = (state, action) => {
@@ -192,6 +275,10 @@ const reducer: GameReducer = (state, action) => {
     ? thrustOn(state)
     : action === GameActions.thrustStop
     ? thrustStop(state)
+    : action === GameActions.shootLaser
+    ? shootLaser(state)
+    : action === GameActions.enableLaser
+    ? enableLaser(state)
     : action === GameActions.gameLoop
     ? gameLoop(state)
     : state;
@@ -214,12 +301,14 @@ const keyHandlers = (dispatch: React.Dispatch<GameActions>) => {
     if (e.keyCode === 37) dispatch(GameActions.rotateLeft);
     else if (e.keyCode === 38) dispatch(GameActions.thrustOn);
     else if (e.keyCode === 39) dispatch(GameActions.rotateRight);
+    else if (e.keyCode === 32) dispatch(GameActions.shootLaser);
   };
 
   const keyUp = (e: KeyboardEvent) => {
     console.log(`keyup: ${e.keyCode}`);
     if (e.keyCode === 37 || e.keyCode === 39) dispatch(GameActions.rotateStop);
     else if (e.keyCode === 38) dispatch(GameActions.thrustStop);
+    else if (e.keyCode === 32) dispatch(GameActions.enableLaser);
   };
   return { keyDown, keyUp };
 };
