@@ -33,8 +33,27 @@ type Ship = {
   dead: boolean;
 };
 
+type Asteroid = {
+  x: number;
+  y: number;
+  xVelocity: number;
+  yVelocity: number;
+  radius: number;
+  angle: number;
+  vert: number;
+  offsets: number[];
+};
+
+type AsteroidBelt = {
+  asteroids: Asteroid[];
+  asteroidsTotal: number;
+  asteroidsLeft: number;
+};
+
 type GameState = {
+  level: number;
   ship: Ship;
+  belt: AsteroidBelt;
 };
 
 enum GameActions {
@@ -57,10 +76,15 @@ const CANVAS = {
 };
 
 const FPS = 60;
-const SHIP_SIZE = 30;
+const SHIP_SIZE = 20;
 const TURN_SPEED = 360; // deg per second
 const SHIP_THRUST = 5; // acceleration of the ship in pixels per sec per sec
 const FRICTION = 0.7; // friction coefficient of space. (0 = no friction, 1 = full friction)
+const ASTEROIDS_NUM = 3;
+const ASTEROIDS_SIZE = 100; // size in pixel
+const ASTEROIDS_SPEED = 50; // max starting speed in pixels per sec
+const ASTEROIDS_VERT = 10; // avg num of vertices
+const ASTEROID_JAG = 0.3;
 const SHIP_EXPLODE_DURATION = 0.3;
 const SHIP_INVINCIBLE_DURATION = 3;
 const SHIP_BLINK_DURATION = 0.1;
@@ -69,6 +93,15 @@ const LASER_MAX = 10;
 const LASER_SPEED = 500; // pixels per second
 const LASER_DIST = 0.6; // fraction of screen width
 const LASER_EXPLODE_DURATION = 0.1;
+
+const distBetweenPoints = (
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+): number => {
+  return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+};
 
 const createShip = (): Ship => ({
   x: CANVAS.width / 2,
@@ -98,15 +131,72 @@ const createLaser = ({ ship }: GameState): Laser => ({
   explodeTime: 0,
 });
 
-const createGameState = (): GameState => ({
-  ship: createShip(),
-});
+const createAstroid = (
+  x: number,
+  y: number,
+  level: number,
+  radius = 0
+): Asteroid => {
+  const levelMultiplier = 1 + 0.1 * level;
+  const angle = Math.random() * Math.PI * 2; // in rad
+  const vert = Math.floor(
+    Math.random() * (ASTEROIDS_VERT + 1) + ASTEROIDS_VERT / 2
+  );
+
+  return {
+    x: x,
+    y: y,
+    xVelocity:
+      ((Math.random() * ASTEROIDS_SPEED * levelMultiplier) / FPS) *
+      (Math.random() < 0.5 ? 1 : -1),
+    yVelocity:
+      ((Math.random() * ASTEROIDS_SPEED * levelMultiplier) / FPS) *
+      (Math.random() < 0.5 ? 1 : -1),
+    radius: radius || Math.ceil(ASTEROIDS_SIZE / 2),
+    angle,
+    vert,
+    offsets: Array(vert)
+      .fill(0)
+      .map((_) => Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG),
+  };
+};
+
+const createAsteroidBelt = (level: number, ship: Ship): AsteroidBelt => {
+  const asteroids: Asteroid[] = [];
+  let x: number, y: number;
+  for (let i = 0; i < ASTEROIDS_NUM + level; i++) {
+    do {
+      x = Math.floor(Math.random() * CANVAS.width);
+      y = Math.floor(Math.random() * CANVAS.height);
+    } while (
+      distBetweenPoints(ship.x, ship.y, x, y) <
+      ASTEROIDS_SIZE * 2 + ship.radius
+    );
+    asteroids.push(createAstroid(x, y, level));
+  }
+  return {
+    asteroids,
+    asteroidsTotal: (ASTEROIDS_NUM + level) * 7,
+    asteroidsLeft: (ASTEROIDS_NUM + level) * 7,
+  };
+};
+
+const createGameState = (): GameState => {
+  const level = 1;
+  const ship = createShip();
+  return {
+    level,
+    ship,
+    belt: createAsteroidBelt(level, ship),
+  };
+};
 
 const drawShip = (
   ctx: CanvasRenderingContext2D,
-  { x, y, angle, ...ship }: Ship,
+  state: GameState,
   color = "white"
 ) => {
+  const { x, y, angle, ...ship } = state.ship;
   ctx.strokeStyle = color;
   ctx.lineWidth = SHIP_SIZE / 20;
   ctx.beginPath();
@@ -161,13 +251,46 @@ const drawLasers = (ctx: CanvasRenderingContext2D, { ship }: GameState) => {
   });
 };
 
+const drawBelt = (ctx: CanvasRenderingContext2D, state: GameState) => {
+  // asteroids
+  ctx.lineWidth = SHIP_SIZE / 20;
+  state.belt.asteroids.forEach(
+    ({ x, y, radius, angle, vert, offsets, xVelocity, yVelocity }, i) => {
+      ctx.strokeStyle = "slategrey";
+
+      // PATH
+      ctx.beginPath();
+      ctx.moveTo(
+        x + radius * offsets[0] * Math.cos(angle),
+        y + radius * offsets[0] * Math.sin(angle)
+      );
+
+      // POLYGON
+      for (let j = 1; j < vert; j++) {
+        ctx.lineTo(
+          x + radius * offsets[j] * Math.cos(angle + (j * Math.PI * 2) / vert),
+          y + radius * offsets[j] * Math.sin(angle + (j * Math.PI * 2) / vert)
+        );
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      if (SHOW_BOUNDING) {
+        ctx.strokeStyle = "lime";
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2, false);
+        ctx.stroke();
+      }
+    }
+  );
+};
+
 const drawBoard = (ctx: CanvasRenderingContext2D, state: GameState) => {
   // space
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, CANVAS.width, CANVAS.height);
 
-  drawShip(ctx, state.ship);
-  drawLasers(ctx, state);
+  [drawBelt, drawShip, drawLasers].forEach((drawer) => drawer(ctx, state));
 };
 
 const rotateLeft = (state: GameState): GameState => ({
@@ -235,10 +358,10 @@ const moveShip = (state: GameState): GameState => {
 };
 
 const moveLasers = (state: GameState): GameState => {
-  const {ship} = state;
-  
+  const { ship } = state;
+
   // if laser is off the board remove it from the array otherwise move it
-  const moveIfOnBoard = (prev: Laser[], {x, y, ...laser}: Laser): Laser[] => {
+  const moveIfOnBoard = (prev: Laser[], { x, y, ...laser }: Laser): Laser[] => {
     return x < 0 || x > CANVAS.width || y < 0 || y > CANVAS.height
       ? prev
       : prev.concat({
