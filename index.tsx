@@ -162,18 +162,20 @@ const createAstroid = (
 };
 
 const createAsteroidBelt = (level: number, ship: Ship): AsteroidBelt => {
-  const asteroids: Asteroid[] = [];
-  let x: number, y: number;
-  for (let i = 0; i < ASTEROIDS_NUM + level; i++) {
-    do {
-      x = Math.floor(Math.random() * CANVAS.width);
-      y = Math.floor(Math.random() * CANVAS.height);
-    } while (
-      distBetweenPoints(ship.x, ship.y, x, y) <
-      ASTEROIDS_SIZE * 2 + ship.radius
-    );
-    asteroids.push(createAstroid(x, y, level));
-  }
+  const asteroids: Asteroid[] = Array(ASTEROIDS_NUM + level)
+    .fill(0)
+    .map((_) => {
+      let x: number, y: number;
+      do {
+        x = Math.floor(Math.random() * CANVAS.width);
+        y = Math.floor(Math.random() * CANVAS.height);
+      } while (
+        distBetweenPoints(ship.x, ship.y, x, y) <
+        ASTEROIDS_SIZE * 2 + ship.radius
+      );
+      return createAstroid(x, y, level);
+    });
+
   return {
     asteroids,
     asteroidsTotal: (ASTEROIDS_NUM + level) * 7,
@@ -380,8 +382,36 @@ const moveLasers = (state: GameState): GameState => {
   };
 };
 
+const moveAsteroids = (state: GameState): GameState => {
+  const { belt } = state;
+
+  const moveAsteroid = (asteroid: Asteroid): Asteroid => {
+    const { radius, xVelocity, yVelocity } = asteroid;
+
+    const x = asteroid.x + xVelocity;
+    const y = asteroid.y + yVelocity;
+
+    // handle edge
+    const leftCorner = 0 - radius;
+    const rightCorner = CANVAS.width + radius;
+    const topCorner = 0 - radius;
+    const bottomCorner = CANVAS.height + radius;
+
+    return {
+      ...asteroid,
+      x: x < leftCorner ? rightCorner : x > rightCorner ? leftCorner : x,
+      y: y < topCorner ? bottomCorner : y > bottomCorner ? topCorner : y,
+    };
+  };
+
+  return {
+    ...state,
+    belt: { ...belt, asteroids: belt.asteroids.map(moveAsteroid) },
+  };
+};
+
 const gameLoop = (state: GameState): GameState => {
-  return [moveShip, moveLasers].reduce(
+  return [moveShip, moveLasers, moveAsteroids].reduce(
     (prev, transducer) => transducer(prev),
     state
   );
