@@ -339,12 +339,22 @@ const enableLaser = (state: GameState): GameState => ({
 const moveShip = (state: GameState): GameState => {
   const { ship } = state;
   const angle = ship.angle + ship.rotation;
+
+  const x = ship.x + ship.thrust.x;
+  const y = ship.y + ship.thrust.y;
+
+  // handle edge of the board
+  const leftCorner = 0 - ship.radius;
+  const rightCorner = CANVAS.width + ship.radius;
+  const topCorner = 0 - ship.radius;
+  const bottomCorner = CANVAS.height + ship.radius;
+
   return {
     ...state,
     ship: {
       ...ship,
-      x: ship.x + ship.thrust.x,
-      y: ship.y + ship.thrust.y,
+      x: x < leftCorner ? rightCorner : x > rightCorner ? leftCorner : x,
+      y: y < topCorner ? bottomCorner : y > bottomCorner ? topCorner : y,
       angle,
       thrust: ship.thrusting
         ? {
@@ -391,7 +401,7 @@ const moveAsteroids = (state: GameState): GameState => {
     const x = asteroid.x + xVelocity;
     const y = asteroid.y + yVelocity;
 
-    // handle edge
+    // handle edge of the board
     const leftCorner = 0 - radius;
     const rightCorner = CANVAS.width + radius;
     const topCorner = 0 - radius;
