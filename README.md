@@ -29,7 +29,7 @@ git init && npm init -y
 ### Install dev dependencies
 This project only uses npm for development dependencies
 ```
-npm i -D  @types/react @types/react-dom react react-dom typescript parcel-bundler 
+npm i -D  @types/react @types/react-dom react react-dom typescript parcel-bundler react-bootstrap bootstrap @types/react-bootstrap eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser prettier eslint-plugin-prettier
 ```
 ### Initialize TypeScript
 ```
