@@ -37,18 +37,12 @@ type Asteroid = RadiusObject & {
   stage: number; // used to determine the size
 };
 
-type AsteroidBelt = {
-  asteroids: Asteroid[];
-  asteroidsTotal: number;
-  asteroidsLeft: number;
-};
-
 type GameState = {
   score: number;
   level: number;
   lives: number;
   ship: Ship;
-  belt: AsteroidBelt;
+  asteroids: Asteroid[];
 };
 
 enum GameActions {
@@ -68,7 +62,7 @@ type GameStore = [GameState, React.Dispatch<GameActions>];
 const FPS = 60;
 const CANVAS = { width: 700, height: 500 };
 const SHIP_SIZE = 20;
-const TURN_SPEED = 360; // deg per second
+const TURN_SPEED = 180; // deg per second
 const SHIP_THRUST = 5; // acceleration of the ship in pixels per sec
 const FRICTION = 0.7; // friction coefficient of space. (0 = no friction, 1 = full friction)
 const ASTEROIDS_NUM = 3;
@@ -162,8 +156,8 @@ const createAsteroid = (
   };
 };
 
-const createAsteroidBelt = (level: number, ship: Ship): AsteroidBelt => {
-  const asteroids: Asteroid[] = Array(ASTEROIDS_NUM + level)
+const createAsteroidBelt = (level: number, ship: Ship): Asteroid[] => {
+  return Array(ASTEROIDS_NUM + level)
     .fill(0)
     .map((_) => {
       let x: number, y: number;
@@ -176,12 +170,6 @@ const createAsteroidBelt = (level: number, ship: Ship): AsteroidBelt => {
       );
       return createAsteroid(x, y, level);
     });
-
-  return {
-    asteroids,
-    asteroidsTotal: (ASTEROIDS_NUM + level) * 7,
-    asteroidsLeft: (ASTEROIDS_NUM + level) * 7,
-  };
 };
 
 const createGameState = (): GameState => {
@@ -192,7 +180,7 @@ const createGameState = (): GameState => {
     lives: 3,
     level,
     ship,
-    belt: createAsteroidBelt(level, ship),
+    asteroids: createAsteroidBelt(level, ship),
   };
 };
 
@@ -257,35 +245,48 @@ const drawLasers = (ctx: CanvasRenderingContext2D, { ship }: GameState) => {
 const drawBelt = (ctx: CanvasRenderingContext2D, state: GameState) => {
   // asteroids
   ctx.lineWidth = SHIP_SIZE / 20;
-  state.belt.asteroids.forEach(
-    ({ x, y, radius, angle, vert, offsets, xVelocity, yVelocity }, i) => {
-      ctx.strokeStyle = "slategrey";
+  state.asteroids.forEach(({ x, y, radius, angle, vert, offsets }, i) => {
+    ctx.strokeStyle = "slategrey";
 
-      // PATH
-      ctx.beginPath();
-      ctx.moveTo(
-        x + radius * offsets[0] * Math.cos(angle),
-        y + radius * offsets[0] * Math.sin(angle)
+    // PATH
+    ctx.beginPath();
+    ctx.moveTo(
+      x + radius * offsets[0] * Math.cos(angle),
+      y + radius * offsets[0] * Math.sin(angle)
+    );
+
+    // POLYGON
+    for (let j = 1; j < vert; j++) {
+      ctx.lineTo(
+        x + radius * offsets[j] * Math.cos(angle + (j * Math.PI * 2) / vert),
+        y + radius * offsets[j] * Math.sin(angle + (j * Math.PI * 2) / vert)
       );
-
-      // POLYGON
-      for (let j = 1; j < vert; j++) {
-        ctx.lineTo(
-          x + radius * offsets[j] * Math.cos(angle + (j * Math.PI * 2) / vert),
-          y + radius * offsets[j] * Math.sin(angle + (j * Math.PI * 2) / vert)
-        );
-      }
-      ctx.closePath();
-      ctx.stroke();
-
-      if (SHOW_BOUNDING) {
-        ctx.strokeStyle = "lime";
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2, false);
-        ctx.stroke();
-      }
     }
-  );
+    ctx.closePath();
+    ctx.stroke();
+
+    if (SHOW_BOUNDING) {
+      ctx.strokeStyle = "lime";
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2, false);
+      ctx.stroke();
+    }
+  });
+};
+
+const drawGameOver = (ctx: CanvasRenderingContext2D, state: GameState) => {
+  if (state.lives === 0) {
+    ctx.fillStyle = "black";
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(0, CANVAS.height / 2 - 30, CANVAS.width, 60);
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "white";
+    ctx.font = "36px monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("GAME OVER!", CANVAS.width / 2, CANVAS.height / 2);
+  }
 };
 
 const drawBoard = (ctx: CanvasRenderingContext2D, state: GameState) => {
@@ -293,7 +294,9 @@ const drawBoard = (ctx: CanvasRenderingContext2D, state: GameState) => {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, CANVAS.width, CANVAS.height);
 
-  [drawBelt, drawShip, drawLasers].forEach((drawer) => drawer(ctx, state));
+  [drawBelt, drawShip, drawLasers, drawGameOver].forEach((drawer) =>
+    drawer(ctx, state)
+  );
 };
 
 const rotateLeft = (state: GameState): GameState => ({
@@ -367,39 +370,52 @@ const moveShip = (state: GameState): GameState => {
   };
 };
 
-const checkShipCollision = (state: GameState): GameState => {
-  const { ship } = state;
-  const checkCollision = (state: boolean, asteroid: Asteroid) =>
-    !state ? circleCollision(ship, asteroid) : state;
+const removeAsteroid = (
+  asteroids: Asteroid[],
+  asteroid: Asteroid,
+  level: number
+): Asteroid[] => {
+  const { stage: stage, x, y } = asteroid;
 
-  return state.belt.asteroids.reduce(checkCollision, false)
-    ? { ...state, ship: createShip() }
+  const newBelt = asteroids.reduce(
+    (prev, ast) => (asteroid == ast ? prev : prev.concat(ast)),
+    [] as Asteroid[]
+  );
+
+  return stage === 1
+    ? newBelt.concat([
+        createAsteroid(x - 5, y - 5, level, 2),
+        createAsteroid(x + 5, y + 5, level, 2),
+      ])
+    : stage === 2
+    ? newBelt.concat([
+        createAsteroid(x - 5, y - 5, level, 3),
+        createAsteroid(x + 5, y + 5, level, 3),
+      ])
+    : newBelt;
+};
+
+const checkShipCollision = (state: GameState): GameState => {
+  const { ship, asteroids, level } = state;
+
+  const hitAsteroid = asteroids.find((asteroid) =>
+    circleCollision(ship, asteroid)
+  );
+
+  return hitAsteroid
+    ? state.lives > 1
+      ? {
+          ...state,
+          ship: createShip(),
+          lives: state.lives - 1,
+          asteroids: removeAsteroid(asteroids, hitAsteroid, level),
+        }
+      : { ...state, lives: 0 }
     : state;
 };
 
 const checkLaserCollision = (state: GameState): GameState => {
-  const { belt, ship, level } = state;
-
-  const removeAsteroid = (asteroid: Asteroid) => {
-    const { stage: stage, x, y } = asteroid;
-
-    const newBelt = belt.asteroids.reduce(
-      (prev, ast) => (asteroid == ast ? prev : prev.concat(ast)),
-      [] as Asteroid[]
-    );
-
-    return stage === 1
-      ? newBelt.concat([
-          createAsteroid(x - 5, y - 5, level, 2),
-          createAsteroid(x + 5, y + 5, level, 2),
-        ])
-      : stage === 2
-      ? newBelt.concat([
-          createAsteroid(x - 5, y - 5, level, 3),
-          createAsteroid(x + 5, y + 5, level, 3),
-        ])
-      : newBelt;
-  };
+  const { asteroids, ship, level } = state;
 
   const removeLaser = (asteroid: Asteroid) =>
     ship.lasers.reduce(
@@ -408,17 +424,14 @@ const checkLaserCollision = (state: GameState): GameState => {
       [] as Laser[]
     );
 
-  const hitAsteroid = belt.asteroids.find((asteroid) =>
+  const hitAsteroid = asteroids.find((asteroid) =>
     ship.lasers.find((laser) => circleCollision(laser, asteroid))
   );
 
   return hitAsteroid
     ? {
         ...state,
-        belt: {
-          ...belt,
-          asteroids: removeAsteroid(hitAsteroid),
-        },
+        asteroids: removeAsteroid(asteroids, hitAsteroid, level),
         ship: {
           ...ship,
           lasers: removeLaser(hitAsteroid),
@@ -452,7 +465,7 @@ const moveLasers = (state: GameState): GameState => {
 };
 
 const moveAsteroids = (state: GameState): GameState => {
-  const { belt } = state;
+  const { asteroids } = state;
 
   const moveAsteroid = (asteroid: Asteroid): Asteroid => {
     const { radius, xVelocity, yVelocity } = asteroid;
@@ -475,18 +488,32 @@ const moveAsteroids = (state: GameState): GameState => {
 
   return {
     ...state,
-    belt: { ...belt, asteroids: belt.asteroids.map(moveAsteroid) },
+    asteroids: asteroids.map(moveAsteroid),
   };
 };
 
+const checkLevelCompleted = (state: GameState): GameState => {
+  const level = state.level + 1;
+  return state.asteroids.length
+    ? state
+    : {
+        ...state,
+        asteroids: createAsteroidBelt(level, state.ship),
+        level,
+      };
+};
+
 const gameLoop = (state: GameState): GameState => {
-  return [
-    moveShip,
-    moveLasers,
-    moveAsteroids,
-    checkShipCollision,
-    checkLaserCollision,
-  ].reduce((prev, transducer) => transducer(prev), state);
+  return state.lives === 0
+    ? state
+    : [
+        moveShip,
+        moveLasers,
+        moveAsteroids,
+        checkShipCollision,
+        checkLaserCollision,
+        checkLevelCompleted,
+      ].reduce((prev, transducer) => transducer(prev), state);
 };
 
 const reducer: GameReducer = (state, action) => {
@@ -559,7 +586,7 @@ export const ScoreBoard = () => {
           <tr>
             <td>Lives:</td>
             <td>
-              <b>{state.level}</b>
+              <b>{state.lives}</b>
             </td>
           </tr>
         </tbody>
@@ -579,7 +606,7 @@ export const Controls = () => {
             </td>
           </tr>
           <tr>
-            <td>start / pause</td>
+            <td>Fire Laser</td>
           </tr>
           <tr>
             <td>
