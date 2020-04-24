@@ -1,4 +1,4 @@
-import React, { Fragment, ProviderProps } from "react";
+import React, { Fragment } from "react";
 import ReactDOM from "react-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import Container from "react-bootstrap/Container";
@@ -27,7 +27,6 @@ type Ship = RadiusObject & {
   blinkNum: number;
   canShoot: boolean;
   lasers: Laser[];
-  dead: boolean;
 };
 
 type Asteroid = RadiusObject & {
@@ -108,11 +107,10 @@ const createShip = (): Ship => ({
   xVelocity: 0,
   yVelocity: 0,
   explodeTime: 0,
-  blinkTime: Math.ceil(SHIP_BLINK_DURATION * FPS),
+  blinkTime: 0,
   blinkNum: Math.ceil(SHIP_INVINCIBLE_DURATION / SHIP_BLINK_DURATION),
   canShoot: true,
   lasers: [],
-  dead: false,
 });
 
 const createLaser = ({ ship }: GameState): Laser => ({
@@ -184,38 +182,44 @@ const createGameState = (): GameState => {
   };
 };
 
+const isGameOver = (state: GameState): boolean => state.lives === 0;
+const isSpawning = (state: GameState): boolean => state.ship.blinkNum > 0;
+
 const drawShip = (
   ctx: CanvasRenderingContext2D,
   state: GameState,
   color = "white"
 ) => {
   const { x, y, angle, ...ship } = state.ship;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = SHIP_SIZE / 20;
-  ctx.beginPath();
-  ctx.moveTo(
-    // nose
-    x + (4 / 3) * ship.radius * Math.cos(angle), // cosine represents horizontal
-    y - (4 / 3) * ship.radius * Math.sin(angle) // sine represents vertical
-  );
-  ctx.lineTo(
-    // rear left
-    x - ship.radius * ((2 / 3) * Math.cos(angle) + Math.sin(angle)),
-    y + ship.radius * ((2 / 3) * Math.sin(angle) - Math.cos(angle))
-  );
-  ctx.lineTo(
-    // rear right
-    x - ship.radius * ((2 / 3) * Math.cos(angle) - Math.sin(angle)),
-    y + ship.radius * ((2 / 3) * Math.sin(angle) + Math.cos(angle))
-  );
-  ctx.closePath();
-  ctx.stroke();
 
-  if (SHOW_BOUNDING) {
-    ctx.strokeStyle = "lime";
+  if (state.ship.blinkNum === 0 || state.ship.blinkNum % 2 === 0) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = SHIP_SIZE / 20;
     ctx.beginPath();
-    ctx.arc(x, y, ship.radius, 0, Math.PI * 2, false);
+    ctx.moveTo(
+      // nose
+      x + (4 / 3) * ship.radius * Math.cos(angle), // cosine represents horizontal
+      y - (4 / 3) * ship.radius * Math.sin(angle) // sine represents vertical
+    );
+    ctx.lineTo(
+      // rear left
+      x - ship.radius * ((2 / 3) * Math.cos(angle) + Math.sin(angle)),
+      y + ship.radius * ((2 / 3) * Math.sin(angle) - Math.cos(angle))
+    );
+    ctx.lineTo(
+      // rear right
+      x - ship.radius * ((2 / 3) * Math.cos(angle) - Math.sin(angle)),
+      y + ship.radius * ((2 / 3) * Math.sin(angle) + Math.cos(angle))
+    );
+    ctx.closePath();
     ctx.stroke();
+
+    if (SHOW_BOUNDING) {
+      ctx.strokeStyle = "lime";
+      ctx.beginPath();
+      ctx.arc(x, y, ship.radius, 0, Math.PI * 2, false);
+      ctx.stroke();
+    }
   }
 };
 
@@ -275,7 +279,7 @@ const drawBelt = (ctx: CanvasRenderingContext2D, state: GameState) => {
 };
 
 const drawGameOver = (ctx: CanvasRenderingContext2D, state: GameState) => {
-  if (state.lives === 0) {
+  if (isGameOver(state)) {
     ctx.fillStyle = "black";
     ctx.globalAlpha = 0.75;
     ctx.fillRect(0, CANVAS.height / 2 - 30, CANVAS.width, 60);
@@ -366,6 +370,25 @@ const moveShip = (state: GameState): GameState => {
       yVelocity: ship.thrusting
         ? ship.yVelocity - (SHIP_THRUST * Math.sin(angle)) / FPS
         : ship.yVelocity - (FRICTION * ship.yVelocity) / FPS,
+    },
+  };
+};
+
+const blinkShip = (state: GameState): GameState => {
+  const { ship } = state;
+  return {
+    ...state,
+    ship: {
+      ...ship,
+      // reduce blink time and num
+      blinkTime:
+        ship.blinkTime === 0
+          ? Math.ceil(SHIP_BLINK_DURATION * FPS)
+          : ship.blinkTime - 1,
+      blinkNum:
+        ship.blinkTime === 0 && ship.blinkNum > 0
+          ? ship.blinkNum - 1
+          : ship.blinkNum,
     },
   };
 };
@@ -504,8 +527,10 @@ const checkLevelCompleted = (state: GameState): GameState => {
 };
 
 const gameLoop = (state: GameState): GameState => {
-  return state.lives === 0
-    ? state
+  return (isGameOver(state)
+    ? []
+    : isSpawning(state)
+    ? [blinkShip, moveAsteroids]
     : [
         moveShip,
         moveLasers,
@@ -513,7 +538,8 @@ const gameLoop = (state: GameState): GameState => {
         checkShipCollision,
         checkLaserCollision,
         checkLevelCompleted,
-      ].reduce((prev, transducer) => transducer(prev), state);
+      ]
+  ).reduce((prev, transducer) => transducer(prev), state);
 };
 
 const reducer: GameReducer = (state, action) => {
