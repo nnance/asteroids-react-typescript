@@ -46,6 +46,7 @@ type AsteroidBelt = {
 type GameState = {
   score: number;
   level: number;
+  lives: number;
   ship: Ship;
   belt: AsteroidBelt;
 };
@@ -188,6 +189,7 @@ const createGameState = (): GameState => {
   const ship = createShip();
   return {
     score: 0,
+    lives: 3,
     level,
     ship,
     belt: createAsteroidBelt(level, ship),
@@ -421,7 +423,7 @@ const checkLaserCollision = (state: GameState): GameState => {
           ...ship,
           lasers: removeLaser(hitAsteroid),
         },
-        score: state.score + POINTS[hitAsteroid.stage - 1]
+        score: state.score + POINTS[hitAsteroid.stage - 1],
       }
     : state;
 };
@@ -536,6 +538,63 @@ const keyHandlers = (dispatch: React.Dispatch<GameActions>) => {
   return { keyDown, keyUp };
 };
 
+export const ScoreBoard = () => {
+  const [state] = React.useContext(GameContext);
+  return (
+    <div style={{ float: "right" }}>
+      <table>
+        <tbody>
+          <tr>
+            <td>Score:</td>
+            <td>
+              <b>{state.score}</b>
+            </td>
+          </tr>
+          <tr>
+            <td>Level:</td>
+            <td>
+              <b>{state.level}</b>
+            </td>
+          </tr>
+          <tr>
+            <td>Lives:</td>
+            <td>
+              <b>{state.level}</b>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+export const Controls = () => {
+  return (
+    <div>
+      <table>
+        <tbody>
+          <tr>
+            <td>
+              <b>Space bar</b>
+            </td>
+          </tr>
+          <tr>
+            <td>start / pause</td>
+          </tr>
+          <tr>
+            <td>
+              <b>R</b>
+            </td>
+          </tr>
+          <tr>
+            <td>reset</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const GameBoard = () => {
   const { width, height } = CANVAS;
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -588,7 +647,13 @@ export const App = () => (
         <h3 className="m-3">Asteroids</h3>
         <Row>
           <Col>
+            <ScoreBoard />
+          </Col>
+          <Col>
             <GameBoard />
+          </Col>
+          <Col>
+            <Controls />
           </Col>
         </Row>
       </Container>
