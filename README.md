@@ -26,6 +26,10 @@ Below are instructions on how to setup a similar project.
 mkdir my-react-app && cd my-react-app
 git init && npm init -y
 ```
+### configure gitignore
+```
+printf "/node_modules\n/dist\n" > .gitignore
+```
 ### Install dev dependencies
 This project only uses npm for development dependencies
 ```
@@ -33,7 +37,7 @@ npm i -D  @types/react @types/react-dom react react-dom typescript parcel-bundle
 ```
 ### Initialize TypeScript
 ```
-tsc --init --jsx react --sourceMap --esModuleInterop --lib es6,dom
+./node_modules/.bin/tsc --init --jsx react --sourceMap --esModuleInterop --lib es6,dom
 ```
 ### Add the following commands to package.json
 ```json

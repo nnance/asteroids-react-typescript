@@ -5,7 +5,7 @@ import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 
-type RadiusObject = {
+type GameEntity = {
   x: number;
   y: number;
   radius: number;
@@ -13,27 +13,46 @@ type RadiusObject = {
   yVelocity: number;
 };
 
-type Laser = RadiusObject & {
+type Laser = GameEntity & {
   distTravelled: number;
   explodeTime: number;
 };
 
-type Ship = RadiusObject & {
+type Ship = GameEntity & {
   angle: number;
   rotation: number;
   thrusting: boolean;
-  explodeTime: number;
   blinkTime: number;
   blinkNum: number;
   canShoot: boolean;
   lasers: Laser[];
 };
 
-type Asteroid = RadiusObject & {
+type Asteroid = GameEntity & {
   angle: number;
   vert: number;
   offsets: number[];
   stage: number; // used to determine the size
+};
+
+type Particle = {
+  x: number;
+  y: number;
+  // track the past coordinates of each particle to create a trail effect, increase the coordinate count to create more prominent trails
+  coordinates: [number, number][];
+  // set a random angle in all possible directions, in radians
+  angle: number;
+  speed: number;
+  brightness: number;
+  alpha: number;
+  // set how fast the particle fades out
+  decay: number;
+};
+
+type Explosion = {
+  x: number;
+  y: number;
+  particles: Particle[];
 };
 
 type GameState = {
@@ -42,6 +61,7 @@ type GameState = {
   lives: number;
   ship: Ship;
   asteroids: Asteroid[];
+  explosions: Explosion[];
 };
 
 enum GameActions {
@@ -71,9 +91,17 @@ const ASTEROIDS_VERT = 10; // avg num of vertices
 const ASTEROID_JAG = 0.3;
 const SHIP_EXPLODE_DURATION = 0.3;
 const SHIP_INVINCIBLE_DURATION = 3;
-const SHIP_BLINK_DURATION = 0.1;
+const SHIP_BLINK_DURATION = 0.3;
 const SHOW_BOUNDING = false;
+const PARTICLE_TRAIL = 2; // the length of the trail on particles
+const PARTICLE_COUNT = 10; // the number of particles in the explosion
+const PARTICLE_GRAVITY = 0; // gravity will be applied and pull the particle down
+const PARTICLE_MAX_SPEED = 2;
+const PARTICLE_FRICTION = 0.95; // friction will slow the particle down
+const PARTICLE_DECAY_MIN = 0.01; // the range of of how fast a particle decays
+const PARTICLE_DECAY_MAX = 0.05;
 const LASER_MAX = 10;
+const LASER_SIZE = 3; // pixel size of laser
 const LASER_SPEED = 500; // pixels per second
 const LASER_DIST = 0.6; // fraction of screen width
 const LASER_EXPLODE_DURATION = 0.1;
@@ -89,7 +117,12 @@ const distBetweenPoints = (
   return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
 };
 
-const circleCollision = (obj1: RadiusObject, obj2: RadiusObject) => {
+// get a random number within a range
+function random(min: number, max: number) {
+  return Math.random() * (max - min) + min;
+}
+
+const circleCollision = (obj1: GameEntity, obj2: GameEntity) => {
   const radiusSum = obj1.radius + obj2.radius;
   const xDiff = obj1.x - obj2.x;
   const yDiff = obj1.y - obj2.y;
@@ -106,7 +139,6 @@ const createShip = (): Ship => ({
   thrusting: false,
   xVelocity: 0,
   yVelocity: 0,
-  explodeTime: 0,
   blinkTime: 0,
   blinkNum: Math.ceil(SHIP_INVINCIBLE_DURATION / SHIP_BLINK_DURATION),
   canShoot: true,
@@ -170,6 +202,26 @@ const createAsteroidBelt = (level: number, ship: Ship): Asteroid[] => {
     });
 };
 
+const createParticle = (x: number, y: number): Particle => ({
+  x: x,
+  y: y,
+  // track the past coordinates of each particle to create a trail effect, increase the coordinate count to create more prominent trails
+  coordinates: Array.from({ length: PARTICLE_TRAIL }, () => [x, y]),
+  // set a random angle in all possible directions, in radians
+  angle: random(0, Math.PI * 2),
+  speed: random(1, PARTICLE_MAX_SPEED),
+  brightness: random(50, 80),
+  alpha: 1,
+  // set how fast the particle fades out
+  decay: random(PARTICLE_DECAY_MIN, PARTICLE_DECAY_MAX),
+});
+
+const createExplosion = (x: number, y: number): Explosion => ({
+  x,
+  y,
+  particles: Array.from({ length: PARTICLE_COUNT }, () => createParticle(x, y)),
+});
+
 const createGameState = (): GameState => {
   const level = 1;
   const ship = createShip();
@@ -179,6 +231,7 @@ const createGameState = (): GameState => {
     level,
     ship,
     asteroids: createAsteroidBelt(level, ship),
+    explosions: [],
   };
 };
 
@@ -223,12 +276,30 @@ const drawShip = (
   }
 };
 
+const drawParticle = (ctx: CanvasRenderingContext2D, state: Particle) => {
+  ctx.beginPath();
+  // move to the last tracked coordinates in the set, then draw a line to the current x and y
+  ctx.moveTo(
+    state.coordinates[state.coordinates.length - 1][0],
+    state.coordinates[state.coordinates.length - 1][1]
+  );
+  ctx.lineTo(state.x, state.y);
+  ctx.strokeStyle = `hsla(white, 100%, ${state.brightness}%, ${state.alpha})`;
+  ctx.stroke();
+};
+
+const drawExplosions = (ctx: CanvasRenderingContext2D, state: GameState) => {
+  state.explosions.forEach((_) =>
+    _.particles.forEach((_) => drawParticle(ctx, _))
+  );
+};
+
 const drawLasers = (ctx: CanvasRenderingContext2D, { ship }: GameState) => {
   // draw laser
   ship.lasers.forEach(({ x, y, explodeTime }) => {
     if (explodeTime === 0) {
       ctx.fillStyle = "white";
-      ctx.fillRect(x, y, 3, 3);
+      ctx.fillRect(x, y, LASER_SIZE, LASER_SIZE);
     } else {
       ctx.fillStyle = "orangered";
       ctx.beginPath();
@@ -298,9 +369,13 @@ const drawBoard = (ctx: CanvasRenderingContext2D, state: GameState) => {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, CANVAS.width, CANVAS.height);
 
-  [drawBelt, drawShip, drawLasers, drawGameOver].forEach((drawer) =>
-    drawer(ctx, state)
-  );
+  [
+    drawBelt,
+    drawShip,
+    drawLasers,
+    drawExplosions,
+    drawGameOver,
+  ].forEach((drawer) => drawer(ctx, state));
 };
 
 const rotateLeft = (state: GameState): GameState => ({
@@ -374,6 +449,34 @@ const moveShip = (state: GameState): GameState => {
   };
 };
 
+const moveParticle = (state: Particle): Particle | undefined => {
+  const { x, y } = state;
+  const coordinates = [...state.coordinates];
+  // remove last item in coordinates array
+  coordinates.pop();
+  // add current coordinates to the start of the array
+  coordinates.unshift([x, y]);
+
+  // slow down the particle
+  const speed = state.speed * PARTICLE_FRICTION;
+
+  // fade out the particle
+  const alpha = state.alpha - state.decay;
+
+  // remove the particle once the alpha is low enough
+  return alpha <= state.decay
+    ? undefined
+    : {
+        ...state,
+        coordinates,
+        speed,
+        alpha,
+        // apply velocity
+        x: x + Math.cos(state.angle) * speed,
+        y: y + Math.sin(state.angle) * speed + PARTICLE_GRAVITY,
+      };
+};
+
 const blinkShip = (state: GameState): GameState => {
   const { ship } = state;
   return {
@@ -392,6 +495,17 @@ const blinkShip = (state: GameState): GameState => {
     },
   };
 };
+
+const animateExplosions = (state: GameState): GameState => ({
+  ...state,
+  explosions: state.explosions.map((explosion) => ({
+    ...explosion,
+    particles: explosion.particles.reduce((prev, particle) => {
+      const newPart = moveParticle(particle);
+      return newPart ? prev.concat(newPart) : prev;
+    }, [] as Particle[]),
+  })),
+});
 
 const removeAsteroid = (
   asteroids: Asteroid[],
@@ -447,8 +561,12 @@ const checkLaserCollision = (state: GameState): GameState => {
       [] as Laser[]
     );
 
-  const hitAsteroid = asteroids.find((asteroid) =>
-    ship.lasers.find((laser) => circleCollision(laser, asteroid))
+  const hitLaser = ship.lasers.find((laser) =>
+    asteroids.find((asteroid) => circleCollision(laser, asteroid))
+  );
+
+  const hitAsteroid = hitLaser && asteroids.find((asteroid) =>
+    circleCollision(hitLaser, asteroid)
   );
 
   return hitAsteroid
@@ -459,6 +577,9 @@ const checkLaserCollision = (state: GameState): GameState => {
           ...ship,
           lasers: removeLaser(hitAsteroid),
         },
+        explosions: state.explosions.concat(
+          createExplosion(hitLaser.x, hitLaser.y)
+        ),
         score: state.score + POINTS[hitAsteroid.stage - 1],
       }
     : state;
@@ -538,6 +659,7 @@ const gameLoop = (state: GameState): GameState => {
         checkShipCollision,
         checkLaserCollision,
         checkLevelCompleted,
+        animateExplosions,
       ]
   ).reduce((prev, transducer) => transducer(prev), state);
 };
