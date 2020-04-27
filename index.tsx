@@ -350,18 +350,16 @@ const drawBelt = (ctx: CanvasRenderingContext2D, state: GameState) => {
 };
 
 const drawGameOver = (ctx: CanvasRenderingContext2D, state: GameState) => {
-  if (isGameOver(state)) {
-    ctx.fillStyle = "black";
-    ctx.globalAlpha = 0.75;
-    ctx.fillRect(0, CANVAS.height / 2 - 30, CANVAS.width, 60);
+  ctx.fillStyle = "black";
+  ctx.globalAlpha = 0.75;
+  ctx.fillRect(0, CANVAS.height / 2 - 30, CANVAS.width, 60);
 
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = "white";
-    ctx.font = "36px monospace";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("GAME OVER!", CANVAS.width / 2, CANVAS.height / 2);
-  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "white";
+  ctx.font = "36px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("GAME OVER!", CANVAS.width / 2, CANVAS.height / 2);
 };
 
 const drawBoard = (ctx: CanvasRenderingContext2D, state: GameState) => {
@@ -369,13 +367,10 @@ const drawBoard = (ctx: CanvasRenderingContext2D, state: GameState) => {
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, CANVAS.width, CANVAS.height);
 
-  [
-    drawBelt,
-    drawShip,
-    drawLasers,
-    drawExplosions,
-    drawGameOver,
-  ].forEach((drawer) => drawer(ctx, state));
+  const drawers = isGameOver(state)
+    ? [drawBelt, drawExplosions, drawGameOver]
+    : [drawBelt, drawShip, drawLasers, drawExplosions];
+  drawers.forEach((drawer) => drawer(ctx, state));
 };
 
 const rotateLeft = (state: GameState): GameState => ({
@@ -532,12 +527,26 @@ const removeAsteroid = (
     : newBelt;
 };
 
+const removeLaser = (asteroid: Asteroid, ship: Ship) =>
+  ship.lasers.reduce(
+    (prev, laser) =>
+      circleCollision(laser, asteroid) ? prev : prev.concat(laser),
+    [] as Laser[]
+  );
+
 const checkShipCollision = (state: GameState): GameState => {
   const { ship, asteroids, level } = state;
 
   const hitAsteroid = asteroids.find((asteroid) =>
     circleCollision(ship, asteroid)
   );
+
+  const explosion =
+    hitAsteroid &&
+    createExplosion(
+      ship.x + (4 / 3) * ship.radius * Math.cos(ship.angle),
+      ship.y - (4 / 3) * ship.radius * Math.sin(ship.angle)
+    );
 
   return hitAsteroid
     ? state.lives > 1
@@ -546,28 +555,28 @@ const checkShipCollision = (state: GameState): GameState => {
           ship: createShip(),
           lives: state.lives - 1,
           asteroids: removeAsteroid(asteroids, hitAsteroid, level),
+          explosions: state.explosions.concat(explosion || []),
         }
-      : { ...state, lives: 0 }
+      : {
+          ...state,
+          lives: 0,
+          explosions: state.explosions.concat(explosion || []),
+        }
     : state;
 };
 
 const checkLaserCollision = (state: GameState): GameState => {
   const { asteroids, ship, level } = state;
 
-  const removeLaser = (asteroid: Asteroid) =>
-    ship.lasers.reduce(
-      (prev, laser) =>
-        circleCollision(laser, asteroid) ? prev : prev.concat(laser),
-      [] as Laser[]
-    );
-
   const hitLaser = ship.lasers.find((laser) =>
     asteroids.find((asteroid) => circleCollision(laser, asteroid))
   );
 
-  const hitAsteroid = hitLaser && asteroids.find((asteroid) =>
-    circleCollision(hitLaser, asteroid)
-  );
+  const hitAsteroid =
+    hitLaser &&
+    asteroids.find((asteroid) => circleCollision(hitLaser, asteroid));
+
+  const explosion = hitLaser && createExplosion(hitLaser.x, hitLaser.y);
 
   return hitAsteroid
     ? {
@@ -575,11 +584,9 @@ const checkLaserCollision = (state: GameState): GameState => {
         asteroids: removeAsteroid(asteroids, hitAsteroid, level),
         ship: {
           ...ship,
-          lasers: removeLaser(hitAsteroid),
+          lasers: removeLaser(hitAsteroid, ship),
         },
-        explosions: state.explosions.concat(
-          createExplosion(hitLaser.x, hitLaser.y)
-        ),
+        explosions: state.explosions.concat(explosion || []),
         score: state.score + POINTS[hitAsteroid.stage - 1],
       }
     : state;
@@ -649,9 +656,9 @@ const checkLevelCompleted = (state: GameState): GameState => {
 
 const gameLoop = (state: GameState): GameState => {
   return (isGameOver(state)
-    ? []
+    ? [animateExplosions]
     : isSpawning(state)
-    ? [blinkShip, moveAsteroids]
+    ? [blinkShip, moveAsteroids, animateExplosions]
     : [
         moveShip,
         moveLasers,
