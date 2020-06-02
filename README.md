@@ -6,6 +6,13 @@ Simple Atari Asteroids implemented in React and TypeScript.
 
 The following steps are how to build and run the development server.
 
+## References
+
+### Drawing with Polygons
+* https://www.arungudelli.com/html5/html5-canvas-polygon/
+* https://github.com/maxwihlborg/youtube-tutorials/blob/master/asteroids/js/points.js
+* https://www.khanacademy.org/math/basic-geo/basic-geo-coord-plane/polygons-in-the-coordinate-plane/e/drawing-polygons
+
 ### Building the repo
 
 ```
