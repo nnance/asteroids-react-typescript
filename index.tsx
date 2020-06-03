@@ -4,79 +4,21 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
-
-type GameEntity = {
-  x: number;
-  y: number;
-  radius: number;
-  xVelocity: number;
-  yVelocity: number;
-};
-
-type Laser = GameEntity & {
-  distTravelled: number;
-  explodeTime: number;
-};
-
-type Ship = GameEntity & {
-  angle: number;
-  rotation: number;
-  thrusting: boolean;
-  blinkTime: number;
-  blinkNum: number;
-  canShoot: boolean;
-  lasers: Laser[];
-};
-
-type Asteroid = GameEntity & {
-  angle: number;
-  vert: number;
-  offsets: number[];
-  stage: number; // used to determine the size
-};
-
-type Particle = {
-  x: number;
-  y: number;
-  // track the past coordinates of each particle to create a trail effect, increase the coordinate count to create more prominent trails
-  coordinates: [number, number][];
-  // set a random angle in all possible directions, in radians
-  angle: number;
-  speed: number;
-  brightness: number;
-  alpha: number;
-  // set how fast the particle fades out
-  decay: number;
-};
-
-type Explosion = {
-  x: number;
-  y: number;
-  particles: Particle[];
-};
-
-type GameState = {
-  score: number;
-  level: number;
-  lives: number;
-  ship: Ship;
-  asteroids: Asteroid[];
-  explosions: Explosion[];
-};
-
-enum GameActions {
-  rotateRight,
-  rotateLeft,
-  rotateStop,
-  thrustOn,
-  thrustStop,
-  shootLaser,
-  enableLaser,
-  gameLoop,
-}
-
-type GameReducer = (state: GameState, action: GameActions) => GameState;
-type GameStore = [GameState, React.Dispatch<GameActions>];
+import {
+  GameStateProvider,
+  GameEntity,
+  Ship,
+  GameState,
+  Laser,
+  Asteroid,
+  Particle,
+  Explosion,
+  GameReducer,
+  KeyHandlers,
+  GameContext,
+  GameBoard,
+  GameActions,
+} from "~/engine";
 
 const FPS = 60;
 const CANVAS = { width: 700, height: 500 };
@@ -221,19 +163,6 @@ const createExplosion = (x: number, y: number): Explosion => ({
   y,
   particles: Array.from({ length: PARTICLE_COUNT }, () => createParticle(x, y)),
 });
-
-const createGameState = (): GameState => {
-  const level = 1;
-  const ship = createShip();
-  return {
-    score: 0,
-    lives: 3,
-    level,
-    ship,
-    asteroids: createAsteroidBelt(level, ship),
-    explosions: [],
-  };
-};
 
 const isGameOver = (state: GameState): boolean => state.lives === 0;
 const isSpawning = (state: GameState): boolean => state.ship.blinkNum > 0;
@@ -691,19 +620,7 @@ const reducer: GameReducer = (state, action) => {
     : state;
 };
 
-const GameContext = React.createContext<GameStore>([
-  createGameState(),
-  () => {},
-]);
-
-const GameStateProvider: React.FC = (props) => {
-  const store: GameStore = React.useReducer(reducer, createGameState());
-  return (
-    <GameContext.Provider value={store}>{props.children}</GameContext.Provider>
-  );
-};
-
-const keyHandlers = (dispatch: React.Dispatch<GameActions>) => {
+const keyHandlers: KeyHandlers = (dispatch) => {
   const keyDown = (e: KeyboardEvent) => {
     if (e.keyCode === 37) dispatch(GameActions.rotateLeft);
     else if (e.keyCode === 38) dispatch(GameActions.thrustOn);
@@ -712,7 +629,6 @@ const keyHandlers = (dispatch: React.Dispatch<GameActions>) => {
   };
 
   const keyUp = (e: KeyboardEvent) => {
-    console.log(`keyup: ${e.keyCode}`);
     if (e.keyCode === 37 || e.keyCode === 39) dispatch(GameActions.rotateStop);
     else if (e.keyCode === 38) dispatch(GameActions.thrustStop);
     else if (e.keyCode === 32) dispatch(GameActions.enableLaser);
@@ -720,7 +636,7 @@ const keyHandlers = (dispatch: React.Dispatch<GameActions>) => {
   return { keyDown, keyUp };
 };
 
-export const ScoreBoard = () => {
+const ScoreBoard = () => {
   const [state] = React.useContext(GameContext);
   return (
     <div style={{ float: "right" }}>
@@ -750,7 +666,7 @@ export const ScoreBoard = () => {
   );
 };
 
-export const Controls = () => {
+const Controls = () => {
   return (
     <div>
       <table>
@@ -777,42 +693,6 @@ export const Controls = () => {
   );
 };
 
-const GameBoard = () => {
-  const { width, height } = CANVAS;
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
-  const [state, dispatch] = React.useContext(GameContext);
-
-  // draw the board every time the state changes
-  React.useEffect(() => {
-    const ctx = canvasRef.current?.getContext("2d");
-    if (ctx) drawBoard(ctx, state);
-  }, [canvasRef, state]);
-
-  // dispatch the game loop on every animation frame
-  React.useEffect(() => {
-    let frameId: number;
-    const loop = () => {
-      frameId = requestAnimationFrame(loop);
-      dispatch(GameActions.gameLoop);
-    };
-    frameId = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frameId);
-  }, [canvasRef]);
-
-  // setup keyboard handlers
-  React.useEffect(() => {
-    const { keyDown, keyUp } = keyHandlers(dispatch);
-    document.addEventListener("keydown", keyDown);
-    document.addEventListener("keyup", keyUp);
-    return () => {
-      document.removeEventListener("keydown", keyDown);
-      document.removeEventListener("keyup", keyUp);
-    };
-  });
-
-  return <canvas ref={canvasRef} width={width} height={height}></canvas>;
-};
-
 const Theme: React.FC = (props) => {
   React.useEffect(() => {
     const { style } = document.body;
@@ -822,9 +702,25 @@ const Theme: React.FC = (props) => {
   return <Fragment>{props.children}</Fragment>;
 };
 
+export const createGameState = (): GameState => {
+  const level = 1;
+  const ship = createShip();
+  return {
+    score: 0,
+    lives: 3,
+    level,
+    ship,
+    asteroids: createAsteroidBelt(level, ship),
+    explosions: [],
+  };
+};
+
 export const App = () => (
   <Theme>
-    <GameStateProvider>
+    <GameStateProvider
+      reducer={reducer}
+      state={createGameState()}
+    >
       <Container style={{ textAlign: "center" }} fluid>
         <h3 className="m-3">Asteroids</h3>
         <Row>
@@ -832,7 +728,12 @@ export const App = () => (
             <ScoreBoard />
           </Col>
           <Col>
-            <GameBoard />
+            <GameBoard
+              width={CANVAS.width}
+              height={CANVAS.height}
+              drawBoard={drawBoard}
+              keyHandlers={keyHandlers}
+            />
           </Col>
           <Col>
             <Controls />
