@@ -8,28 +8,6 @@ export type GameEntity = {
   yVelocity: number;
 };
 
-export type Laser = GameEntity & {
-  distTravelled: number;
-  explodeTime: number;
-};
-
-export type Ship = GameEntity & {
-  angle: number;
-  rotation: number;
-  thrusting: boolean;
-  blinkTime: number;
-  blinkNum: number;
-  canShoot: boolean;
-  lasers: Laser[];
-};
-
-export type Asteroid = GameEntity & {
-  angle: number;
-  vert: number;
-  offsets: number[];
-  stage: number; // used to determine the size
-};
-
 export type Particle = {
   x: number;
   y: number;
@@ -54,8 +32,6 @@ export type GameState = {
   score: number;
   level: number;
   lives: number;
-  ship: Ship;
-  asteroids: Asteroid[];
   explosions: Explosion[];
 };
 
