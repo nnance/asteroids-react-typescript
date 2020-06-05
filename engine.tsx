@@ -1,4 +1,4 @@
-import React from "react";
+import React, { CSSProperties } from "react";
 
 export type GameEntity = {
   x: number;
@@ -6,33 +6,19 @@ export type GameEntity = {
   radius: number;
   xVelocity: number;
   yVelocity: number;
+  layer: number;
 };
 
-export type Particle = {
-  x: number;
-  y: number;
-  // track the past coordinates of each particle to create a trail effect, increase the coordinate count to create more prominent trails
-  coordinates: [number, number][];
-  // set a random angle in all possible directions, in radians
-  angle: number;
-  speed: number;
-  brightness: number;
-  alpha: number;
-  // set how fast the particle fades out
-  decay: number;
-};
-
-export type Explosion = {
-  x: number;
-  y: number;
-  particles: Particle[];
-};
+export type Drawer = (
+  layers: CanvasRenderingContext2D[],
+  state: GameState
+) => void;
 
 export type GameState = {
   score: number;
   level: number;
   lives: number;
-  explosions: Explosion[];
+  drawers: Drawer[];
 };
 
 export enum GameActions {
@@ -64,8 +50,37 @@ export type KeyHandlers = (
 export type GameBoardProps = {
   width: number;
   height: number;
-  drawBoard: (ctx: CanvasRenderingContext2D, state: GameState) => void;
   keyHandlers: KeyHandlers;
+  style?: CSSProperties;
+};
+
+const createLayer = (
+  width: number,
+  height: number
+): CanvasRenderingContext2D | null => {
+  const layer = document.createElement("canvas");
+  layer.width = width;
+  layer.height = height;
+  return layer.getContext("2d");
+};
+
+const createLayers = (width: number, height: number) => {
+  const layers = Array.from({ length: 3 }, () => createLayer(width, height));
+  return layers.filter((_) => _ !== null) as CanvasRenderingContext2D[];
+};
+
+const drawBoard = (
+  ctx: CanvasRenderingContext2D,
+  layers: CanvasRenderingContext2D[],
+  state: GameState
+) => {
+  layers.forEach((layer) => {
+    layer.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+  });
+  state.drawers.forEach((drawer) => drawer(layers, state));
+
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  layers.forEach((layer) => ctx.drawImage(layer.canvas, 0, 0));
 };
 
 export const GameContext = React.createContext<GameStore>([{}, () => {}]);
@@ -82,16 +97,17 @@ export const GameStateProvider: React.FC<GameProviderProps> = ({
 export const GameBoard: React.FC<GameBoardProps> = ({
   width,
   height,
-  drawBoard,
+  style,
   keyHandlers,
 }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const layerRef = React.useRef(createLayers(width, height));
   const [state, dispatch] = React.useContext(GameContext);
 
   // draw the board every time the state changes
   React.useEffect(() => {
     const ctx = canvasRef.current?.getContext("2d");
-    if (ctx) drawBoard(ctx, state as GameState);
+    if (ctx) drawBoard(ctx, layerRef.current, state as GameState);
   }, [canvasRef, state]);
 
   // dispatch the game loop on every animation frame
@@ -116,5 +132,5 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     };
   });
 
-  return <canvas ref={canvasRef} width={width} height={height}></canvas>;
+  return <canvas ref={canvasRef} width={width} height={height} style={style}></canvas>;
 };
