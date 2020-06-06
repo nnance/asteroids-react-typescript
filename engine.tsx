@@ -71,6 +71,37 @@ const createLayers = (width: number, height: number) => {
   return layers.filter((_) => _ !== null) as CanvasRenderingContext2D[];
 };
 
+const rotatePolygon = (angle: number, offsets: Point[]): Point[] => {
+  return offsets.map((offset) => [
+    offset[0] * Math.sin(angle) - offset[1] * Math.cos(angle),
+    offset[0] * Math.cos(angle) + offset[1] * Math.sin(angle),
+  ]);
+};
+
+export const drawPolygon = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  angle: number,
+  points: Point[]
+) => {
+  const offsets = rotatePolygon(angle, points);
+
+  ctx.beginPath();
+  ctx.moveTo(x + radius * offsets[0][0], y + radius * offsets[0][1]);
+
+  // POLYGON
+  offsets.forEach((offset, idx) => {
+    if (idx > 0) {
+      ctx.lineTo(x + radius * offset[0], y + radius * offset[1]);
+    }
+  });
+
+  ctx.closePath();
+  ctx.stroke();
+};
+
 const drawBoard = (
   ctx: CanvasRenderingContext2D,
   layers: CanvasRenderingContext2D[],
@@ -134,5 +165,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     };
   });
 
-  return <canvas ref={canvasRef} width={width} height={height} style={style}></canvas>;
+  return (
+    <canvas
+      ref={canvasRef}
+      width={width}
+      height={height}
+      style={style}
+    ></canvas>
+  );
 };

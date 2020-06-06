@@ -15,6 +15,7 @@ import {
   GameActions,
   Drawer,
   Point,
+  drawPolygon,
 } from "~/engine";
 
 type Laser = GameEntity & {
@@ -231,41 +232,21 @@ const drawShip: Drawer = (ctxs, state, color = "white") => {
     angle,
     layer,
     offsets,
+    radius,
     ...ship
   } = (state as AsteroidsState).ship;
   const ctx = ctxs[layer];
-
-  const radiusOffset = ship.radius - 7;
 
   if (ship.blinkNum === 0 || ship.blinkNum % 2 === 0) {
     ctx.strokeStyle = color;
     ctx.lineWidth = SHIP_SIZE / 20;
 
-    const newOffsets = offsets.map((offset) => [
-      offset[0] * Math.sin(angle) - offset[1] * Math.cos(angle),
-      offset[0] * Math.cos(angle) + offset[1] * Math.sin(angle),
-    ]);
-
-    ctx.beginPath();
-    ctx.moveTo(
-      x + radiusOffset * newOffsets[0][0],
-      y + radiusOffset * newOffsets[0][1]
-    );
-
-    // POLYGON
-    newOffsets.forEach((offset, idx) => {
-      if (idx > 0) {
-        ctx.lineTo(x + radiusOffset * offset[0], y + radiusOffset * offset[1]);
-      }
-    });
-
-    ctx.closePath();
-    ctx.stroke();
+    drawPolygon(ctx, x, y, radius - 7, angle, offsets);
 
     if (SHOW_BOUNDING) {
       ctx.strokeStyle = "lime";
       ctx.beginPath();
-      ctx.arc(x, y, ship.radius, 0, Math.PI * 2, false);
+      ctx.arc(x, y, radius, 0, Math.PI * 2, false);
       ctx.stroke();
     }
   }
@@ -428,6 +409,7 @@ const moveShip = (state: AsteroidsState): AsteroidsState => {
       x: x < leftCorner ? rightCorner : x > rightCorner ? leftCorner : x,
       y: y < topCorner ? bottomCorner : y > bottomCorner ? topCorner : y,
       angle,
+      // offsets: angle !== ship.angle ? rotatePolygon(angle, ship.offsets) : ship.offsets,
       xVelocity: ship.thrusting
         ? ship.xVelocity + (SHIP_THRUST * Math.cos(angle)) / FPS
         : ship.xVelocity - (FRICTION * ship.xVelocity) / FPS,
