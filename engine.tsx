@@ -1,5 +1,7 @@
 import React, { CSSProperties } from "react";
 
+export type Point = [number, number];
+
 export type GameEntity = {
   x: number;
   y: number;

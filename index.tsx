@@ -14,6 +14,7 @@ import {
   GameBoard,
   GameActions,
   Drawer,
+  Point,
 } from "~/engine";
 
 type Laser = GameEntity & {
@@ -23,6 +24,7 @@ type Laser = GameEntity & {
 
 type Ship = GameEntity & {
   angle: number;
+  offsets: Point[];
   rotation: number;
   thrusting: boolean;
   blinkTime: number;
@@ -54,7 +56,6 @@ type Explosion = {
 
 type Asteroid = GameEntity & {
   angle: number;
-  vert: number;
   offsets: number[];
   stage: number; // used to determine the size
 };
@@ -63,7 +64,7 @@ type AsteroidsState = GameState & {
   ship: Ship;
   asteroids: Asteroid[];
   explosions: Explosion[];
-}
+};
 
 const FPS = 60;
 const CANVAS = { width: 700, height: 500 };
@@ -120,6 +121,13 @@ const circleCollision = (obj1: GameEntity, obj2: GameEntity) => {
 const createShip = (): Ship => ({
   x: CANVAS.width / 2,
   y: CANVAS.height / 2,
+  offsets: [
+    [0, -6],
+    [-3, 3],
+    [0, 2],
+    [3, 3],
+    [0, -6],
+  ],
   layer: 0,
   radius: SHIP_SIZE / 2,
   angle: (90 / 180) * Math.PI, // 90 deg -> up, converting to rad
@@ -152,7 +160,7 @@ const createAsteroid = (
 ): Asteroid => {
   const levelMultiplier = 1 + 0.1 * level;
   const angle = Math.random() * Math.PI * 2; // in rad
-  const vert = Math.floor(
+  const length = Math.floor(
     Math.random() * (ASTEROIDS_VERT + 1) + ASTEROIDS_VERT / 2
   );
 
@@ -168,11 +176,11 @@ const createAsteroid = (
       (Math.random() < 0.5 ? 1 : -1),
     radius: Math.ceil(ASTEROIDS_SIZE[stage - 1] / 2),
     angle,
-    vert,
     stage,
-    offsets: Array(vert)
-      .fill(0)
-      .map((_) => Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG),
+    offsets: Array.from(
+      { length },
+      () => Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG
+    ),
   };
 };
 
@@ -216,33 +224,41 @@ const createExplosion = (x: number, y: number): Explosion => ({
 const isGameOver = (state: AsteroidsState): boolean => state.lives === 0;
 const isSpawning = (state: AsteroidsState): boolean => state.ship.blinkNum > 0;
 
-const drawShip: Drawer = (
-  ctxs,
-  state,
-  color = "white"
-) => {
-  const { x, y, angle, layer, ...ship } = (state as AsteroidsState).ship;
+const drawShip: Drawer = (ctxs, state, color = "white") => {
+  const {
+    x,
+    y,
+    angle,
+    layer,
+    offsets,
+    ...ship
+  } = (state as AsteroidsState).ship;
   const ctx = ctxs[layer];
+
+  const radiusOffset = ship.radius - 7;
 
   if (ship.blinkNum === 0 || ship.blinkNum % 2 === 0) {
     ctx.strokeStyle = color;
     ctx.lineWidth = SHIP_SIZE / 20;
+
+    const newOffsets = offsets.map((offset) => [
+      offset[0] * Math.sin(angle) - offset[1] * Math.cos(angle),
+      offset[0] * Math.cos(angle) + offset[1] * Math.sin(angle),
+    ]);
+
     ctx.beginPath();
     ctx.moveTo(
-      // nose
-      x + (4 / 3) * ship.radius * Math.cos(angle), // cosine represents horizontal
-      y - (4 / 3) * ship.radius * Math.sin(angle) // sine represents vertical
+      x + radiusOffset * newOffsets[0][0],
+      y + radiusOffset * newOffsets[0][1]
     );
-    ctx.lineTo(
-      // rear left
-      x - ship.radius * ((2 / 3) * Math.cos(angle) + Math.sin(angle)),
-      y + ship.radius * ((2 / 3) * Math.sin(angle) - Math.cos(angle))
-    );
-    ctx.lineTo(
-      // rear right
-      x - ship.radius * ((2 / 3) * Math.cos(angle) - Math.sin(angle)),
-      y + ship.radius * ((2 / 3) * Math.sin(angle) + Math.cos(angle))
-    );
+
+    // POLYGON
+    newOffsets.forEach((offset, idx) => {
+      if (idx > 0) {
+        ctx.lineTo(x + radiusOffset * offset[0], y + radiusOffset * offset[1]);
+      }
+    });
+
     ctx.closePath();
     ctx.stroke();
 
@@ -270,7 +286,7 @@ const drawParticle = (ctx: CanvasRenderingContext2D, state: Particle) => {
 const drawExplosions: Drawer = (ctxs, state) => {
   (state as AsteroidsState).explosions.forEach((_) => {
     const ctx = ctxs[_.layer];
-    _.particles.forEach((_) => drawParticle(ctx, _))
+    _.particles.forEach((_) => drawParticle(ctx, _));
   });
 };
 
@@ -302,35 +318,39 @@ const drawLasers: Drawer = (ctxs, state) => {
 
 const drawBelt: Drawer = (ctxs, state) => {
   // asteroids
-  
-  (state as AsteroidsState).asteroids.forEach(({ x, y, radius, angle, vert, offsets, layer }, i) => {
-    const ctx = ctxs[layer];
-    ctx.lineWidth = SHIP_SIZE / 20;
-    ctx.strokeStyle = "slategrey";
-    // PATH
-    ctx.beginPath();
-    ctx.moveTo(
-      x + radius * offsets[0] * Math.cos(angle),
-      y + radius * offsets[0] * Math.sin(angle)
-    );
 
-    // POLYGON
-    for (let j = 1; j < vert; j++) {
-      ctx.lineTo(
-        x + radius * offsets[j] * Math.cos(angle + (j * Math.PI * 2) / vert),
-        y + radius * offsets[j] * Math.sin(angle + (j * Math.PI * 2) / vert)
-      );
-    }
-    ctx.closePath();
-    ctx.stroke();
+  (state as AsteroidsState).asteroids.forEach(
+    ({ x, y, radius, angle, offsets, layer }, i) => {
+      const ctx = ctxs[layer];
+      const vert = offsets.length;
 
-    if (SHOW_BOUNDING) {
-      ctx.strokeStyle = "lime";
+      ctx.lineWidth = SHIP_SIZE / 20;
+      ctx.strokeStyle = "slategrey";
+      // PATH
       ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2, false);
+      ctx.moveTo(
+        x + radius * offsets[0] * Math.cos(angle),
+        y + radius * offsets[0] * Math.sin(angle)
+      );
+
+      // POLYGON
+      for (let j = 1; j < vert; j++) {
+        ctx.lineTo(
+          x + radius * offsets[j] * Math.cos(angle + (j * Math.PI * 2) / vert),
+          y + radius * offsets[j] * Math.sin(angle + (j * Math.PI * 2) / vert)
+        );
+      }
+      ctx.closePath();
       ctx.stroke();
+
+      if (SHOW_BOUNDING) {
+        ctx.strokeStyle = "lime";
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2, false);
+        ctx.stroke();
+      }
     }
-  });
+  );
 };
 
 const drawGameOver: Drawer = (ctxs, state) => {
@@ -631,9 +651,9 @@ const checkLevelCompleted = (state: AsteroidsState): AsteroidsState => {
 const gameOverDrawers = (state: AsteroidsState): AsteroidsState => {
   return {
     ...state,
-    drawers: [drawBelt, drawExplosions, drawGameOver]
-  }
-}
+    drawers: [drawBelt, drawExplosions, drawGameOver],
+  };
+};
 
 const gameLoop = (state: AsteroidsState): AsteroidsState => {
   return (isGameOver(state)
@@ -765,16 +785,13 @@ const createAsteroidsState = (): AsteroidsState => {
     ship,
     asteroids: createAsteroidBelt(level, ship),
     explosions: [],
-    drawers: [drawBelt, drawShip, drawLasers, drawExplosions]
+    drawers: [drawBelt, drawShip, drawLasers, drawExplosions],
   };
 };
 
 export const App = () => (
   <Theme>
-    <GameStateProvider
-      reducer={reducer}
-      state={createAsteroidsState()}
-    >
+    <GameStateProvider reducer={reducer} state={createAsteroidsState()}>
       <Container style={{ textAlign: "center" }} fluid>
         <h3 className="m-3">Asteroids</h3>
         <Row>
@@ -786,7 +803,7 @@ export const App = () => (
               width={CANVAS.width}
               height={CANVAS.height}
               keyHandlers={keyHandlers}
-              style={{backgroundColor: "black"}}
+              style={{ backgroundColor: "black" }}
             />
           </Col>
           <Col>
