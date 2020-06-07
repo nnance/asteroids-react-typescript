@@ -14,8 +14,9 @@ import {
   GameBoard,
   GameActions,
   Drawer,
-  Point,
-  drawPolygon,
+  polygonSystem,
+  Polygon,
+  DrawableSystem,
 } from "~/engine";
 
 type Laser = GameEntity & {
@@ -23,9 +24,7 @@ type Laser = GameEntity & {
   explodeTime: number;
 };
 
-type Ship = GameEntity & {
-  angle: number;
-  offsets: Point[];
+type Ship = Polygon & {
   rotation: number;
   thrusting: boolean;
   blinkTime: number;
@@ -62,7 +61,6 @@ type Asteroid = GameEntity & {
 };
 
 type AsteroidsState = GameState & {
-  ship: Ship;
   asteroids: Asteroid[];
   explosions: Explosion[];
 };
@@ -122,7 +120,7 @@ const circleCollision = (obj1: GameEntity, obj2: GameEntity) => {
 const createShip = (): Ship => ({
   x: CANVAS.width / 2,
   y: CANVAS.height / 2,
-  offsets: [
+  points: [
     [0, -6],
     [-3, 3],
     [0, 2],
@@ -131,8 +129,11 @@ const createShip = (): Ship => ({
   ],
   layer: 0,
   radius: SHIP_SIZE / 2,
+  scale: SHIP_SIZE / 2,
   angle: (90 / 180) * Math.PI, // 90 deg -> up, converting to rad
   rotation: 0,
+  lineColor: "white",
+  lineWidth: SHIP_SIZE / 20,
   thrusting: false,
   xVelocity: 0,
   yVelocity: 0,
@@ -142,16 +143,23 @@ const createShip = (): Ship => ({
   lasers: [],
 });
 
-const createLaser = ({ ship }: AsteroidsState): Laser => ({
-  x: ship.x + (4 / 3) * ship.radius * Math.cos(ship.angle),
-  y: ship.y - (4 / 3) * ship.radius * Math.sin(ship.angle),
-  layer: 0,
-  xVelocity: (LASER_SPEED * Math.cos(ship.angle)) / FPS,
-  yVelocity: (-LASER_SPEED * Math.sin(ship.angle)) / FPS,
-  radius: 3,
-  distTravelled: 0,
-  explodeTime: 0,
-});
+const getShip = (state: AsteroidsState): Ship => {
+  return state.entities[0] as Ship;
+};
+
+const createLaser = (state: AsteroidsState): Laser => {
+  const ship = getShip(state);
+  return {
+    x: ship.x + (4 / 3) * ship.radius * Math.cos(ship.angle),
+    y: ship.y - (4 / 3) * ship.radius * Math.sin(ship.angle),
+    layer: 0,
+    xVelocity: (LASER_SPEED * Math.cos(ship.angle)) / FPS,
+    yVelocity: (-LASER_SPEED * Math.sin(ship.angle)) / FPS,
+    radius: 3,
+    distTravelled: 0,
+    explodeTime: 0,
+  };
+};
 
 const createAsteroid = (
   x: number,
@@ -223,8 +231,10 @@ const createExplosion = (x: number, y: number): Explosion => ({
 });
 
 const isGameOver = (state: AsteroidsState): boolean => state.lives === 0;
-const isSpawning = (state: AsteroidsState): boolean => state.ship.blinkNum > 0;
+const isSpawning = (state: AsteroidsState): boolean =>
+  getShip(state).blinkNum > 0;
 
+/*
 const drawShip: Drawer = (ctxs, state, color = "white") => {
   const {
     x,
@@ -251,6 +261,7 @@ const drawShip: Drawer = (ctxs, state, color = "white") => {
     }
   }
 };
+*/
 
 const drawParticle = (ctx: CanvasRenderingContext2D, state: Particle) => {
   ctx.beginPath();
@@ -272,7 +283,7 @@ const drawExplosions: Drawer = (ctxs, state) => {
 };
 
 const drawLasers: Drawer = (ctxs, state) => {
-  const { ship } = state as AsteroidsState;
+  const ship = getShip(state as AsteroidsState);
   // draw laser
   ship.lasers.forEach(({ x, y, explodeTime }) => {
     const ctx = ctxs[ship.layer];
@@ -348,49 +359,70 @@ const drawGameOver: Drawer = (ctxs, state) => {
   ctx.fillText("GAME OVER!", CANVAS.width / 2, CANVAS.height / 2);
 };
 
-const rotateLeft = (state: AsteroidsState): AsteroidsState => ({
-  ...state,
-  ship: { ...state.ship, rotation: ((TURN_SPEED / 180) * Math.PI) / FPS },
-});
+const rotateLeft = (state: AsteroidsState): AsteroidsState => {
+  const ship = getShip(state);
+  return {
+    ...state,
+    entities: [{ ...ship, rotation: ((TURN_SPEED / 180) * Math.PI) / FPS } as Ship],
+  };
+};
 
-const rotateRight = (state: AsteroidsState): AsteroidsState => ({
-  ...state,
-  ship: { ...state.ship, rotation: ((-TURN_SPEED / 180) * Math.PI) / FPS },
-});
+const rotateRight = (state: AsteroidsState): AsteroidsState => {
+  const ship = getShip(state);
+  return {
+    ...state,
+    entities: [{ ...ship, rotation: ((-TURN_SPEED / 180) * Math.PI) / FPS } as Ship],
+  };
+};
 
-const rotateStop = (state: AsteroidsState): AsteroidsState => ({
-  ...state,
-  ship: { ...state.ship, rotation: 0 },
-});
+const rotateStop = (state: AsteroidsState): AsteroidsState => {
+  const ship = getShip(state);
+  return {
+    ...state,
+    entities: [{ ...ship, rotation: 0 } as Ship],
+  };
+};
 
-const thrustOn = (state: AsteroidsState): AsteroidsState => ({
-  ...state,
-  ship: { ...state.ship, thrusting: true },
-});
+const thrustOn = (state: AsteroidsState): AsteroidsState => {
+  const ship = getShip(state);
+  return {
+    ...state,
+    entities: [{ ...ship, thrusting: true } as Ship],
+  };
+};
 
-const thrustStop = (state: AsteroidsState): AsteroidsState => ({
-  ...state,
-  ship: { ...state.ship, thrusting: false },
-});
+const thrustStop = (state: AsteroidsState): AsteroidsState => {
+  const ship = getShip(state);
+  return {
+    ...state,
+    entities: [{ ...ship, thrusting: false } as Ship],
+  };
+};
 
-const shootLaser = (state: AsteroidsState): AsteroidsState => ({
-  ...state,
-  ship: state.ship.canShoot
+const shootLaser = (state: AsteroidsState): AsteroidsState => {
+  const ship = getShip(state);
+  return {
+    ...state,
+    entities: [ship.canShoot
     ? {
-        ...state.ship,
-        lasers: state.ship.lasers.concat(createLaser(state)),
+        ...ship,
+        lasers: ship.lasers.concat(createLaser(state)),
         canShoot: false,
-      }
-    : { ...state.ship },
-});
+      } as Ship
+    : ship]
+  };
+};
 
-const enableLaser = (state: AsteroidsState): AsteroidsState => ({
-  ...state,
-  ship: { ...state.ship, canShoot: true },
-});
+const enableLaser = (state: AsteroidsState): AsteroidsState => {
+  const ship = getShip(state);
+  return {
+    ...state,
+    entities: [{ ...ship, canShoot: true } as Ship],
+  };
+};
 
 const moveShip = (state: AsteroidsState): AsteroidsState => {
-  const { ship } = state;
+  const ship = getShip(state);
   const angle = ship.angle + ship.rotation;
 
   const x = ship.x + ship.xVelocity;
@@ -404,7 +436,7 @@ const moveShip = (state: AsteroidsState): AsteroidsState => {
 
   return {
     ...state,
-    ship: {
+    entities: [{
       ...ship,
       x: x < leftCorner ? rightCorner : x > rightCorner ? leftCorner : x,
       y: y < topCorner ? bottomCorner : y > bottomCorner ? topCorner : y,
@@ -416,7 +448,7 @@ const moveShip = (state: AsteroidsState): AsteroidsState => {
       yVelocity: ship.thrusting
         ? ship.yVelocity - (SHIP_THRUST * Math.sin(angle)) / FPS
         : ship.yVelocity - (FRICTION * ship.yVelocity) / FPS,
-    },
+    } as Ship],
   };
 };
 
@@ -449,10 +481,10 @@ const moveParticle = (state: Particle): Particle | undefined => {
 };
 
 const blinkShip = (state: AsteroidsState): AsteroidsState => {
-  const { ship } = state;
+  const ship = getShip(state);
   return {
     ...state,
-    ship: {
+    entities: [{
       ...ship,
       // reduce blink time and num
       blinkTime:
@@ -463,7 +495,7 @@ const blinkShip = (state: AsteroidsState): AsteroidsState => {
         ship.blinkTime === 0 && ship.blinkNum > 0
           ? ship.blinkNum - 1
           : ship.blinkNum,
-    },
+    } as Ship],
   };
 };
 
@@ -511,7 +543,8 @@ const removeLaser = (asteroid: Asteroid, ship: Ship) =>
   );
 
 const checkShipCollision = (state: AsteroidsState): AsteroidsState => {
-  const { ship, asteroids, level } = state;
+  const { asteroids, level } = state;
+  const ship = getShip(state);
 
   const hitAsteroid = asteroids.find((asteroid) =>
     circleCollision(ship, asteroid)
@@ -528,7 +561,7 @@ const checkShipCollision = (state: AsteroidsState): AsteroidsState => {
     ? state.lives > 1
       ? {
           ...state,
-          ship: createShip(),
+          entities: [createShip()],
           lives: state.lives - 1,
           asteroids: removeAsteroid(asteroids, hitAsteroid, level),
           explosions: state.explosions.concat(explosion || []),
@@ -542,7 +575,8 @@ const checkShipCollision = (state: AsteroidsState): AsteroidsState => {
 };
 
 const checkLaserCollision = (state: AsteroidsState): AsteroidsState => {
-  const { asteroids, ship, level } = state;
+  const { asteroids, level } = state;
+  const ship = getShip(state);
 
   const hitLaser = ship.lasers.find((laser) =>
     asteroids.find((asteroid) => circleCollision(laser, asteroid))
@@ -558,10 +592,10 @@ const checkLaserCollision = (state: AsteroidsState): AsteroidsState => {
     ? {
         ...state,
         asteroids: removeAsteroid(asteroids, hitAsteroid, level),
-        ship: {
+        entities: [{
           ...ship,
           lasers: removeLaser(hitAsteroid, ship),
-        },
+        } as Ship],
         explosions: state.explosions.concat(explosion || []),
         score: state.score + POINTS[hitAsteroid.stage - 1],
       }
@@ -569,7 +603,7 @@ const checkLaserCollision = (state: AsteroidsState): AsteroidsState => {
 };
 
 const moveLasers = (state: AsteroidsState): AsteroidsState => {
-  const { ship } = state;
+  const ship = getShip(state);
 
   // if laser is off the board remove it from the array otherwise move it
   const moveIfOnBoard = (prev: Laser[], { x, y, ...laser }: Laser): Laser[] => {
@@ -584,10 +618,10 @@ const moveLasers = (state: AsteroidsState): AsteroidsState => {
 
   return {
     ...state,
-    ship: {
+    entities: [{
       ...ship,
       lasers: ship.lasers.reduce(moveIfOnBoard, []),
-    },
+    } as Ship],
   };
 };
 
@@ -625,7 +659,7 @@ const checkLevelCompleted = (state: AsteroidsState): AsteroidsState => {
     ? state
     : {
         ...state,
-        asteroids: createAsteroidBelt(level, state.ship),
+        asteroids: createAsteroidBelt(level, getShip(state)),
         level,
       };
 };
@@ -764,10 +798,11 @@ const createAsteroidsState = (): AsteroidsState => {
     score: 0,
     lives: 3,
     level,
-    ship,
     asteroids: createAsteroidBelt(level, ship),
     explosions: [],
-    drawers: [drawBelt, drawShip, drawLasers, drawExplosions],
+    drawers: [drawBelt, drawLasers, drawExplosions],
+    renders: [polygonSystem(SHOW_BOUNDING)],
+    entities: [ship],
   };
 };
 

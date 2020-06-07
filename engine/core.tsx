@@ -1,27 +1,6 @@
 import React, { CSSProperties } from "react";
-
-export type Point = [number, number];
-
-export type GameEntity = {
-  x: number;
-  y: number;
-  radius: number;
-  xVelocity: number;
-  yVelocity: number;
-  layer: number;
-};
-
-export type Drawer = (
-  layers: CanvasRenderingContext2D[],
-  state: GameState
-) => void;
-
-export type GameState = {
-  score: number;
-  level: number;
-  lives: number;
-  drawers: Drawer[];
-};
+import { drawBoard } from "~/engine/rendering";
+import { GameState } from "~/engine/types";
 
 export enum GameActions {
   rotateRight,
@@ -69,51 +48,6 @@ const createLayer = (
 const createLayers = (width: number, height: number) => {
   const layers = Array.from({ length: 3 }, () => createLayer(width, height));
   return layers.filter((_) => _ !== null) as CanvasRenderingContext2D[];
-};
-
-const rotatePolygon = (angle: number, offsets: Point[]): Point[] => {
-  return offsets.map((offset) => [
-    offset[0] * Math.sin(angle) - offset[1] * Math.cos(angle),
-    offset[0] * Math.cos(angle) + offset[1] * Math.sin(angle),
-  ]);
-};
-
-export const drawPolygon = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  radius: number,
-  angle: number,
-  points: Point[]
-) => {
-  const offsets = rotatePolygon(angle, points);
-
-  ctx.beginPath();
-  ctx.moveTo(x + radius * offsets[0][0], y + radius * offsets[0][1]);
-
-  // POLYGON
-  offsets.forEach((offset, idx) => {
-    if (idx > 0) {
-      ctx.lineTo(x + radius * offset[0], y + radius * offset[1]);
-    }
-  });
-
-  ctx.closePath();
-  ctx.stroke();
-};
-
-const drawBoard = (
-  ctx: CanvasRenderingContext2D,
-  layers: CanvasRenderingContext2D[],
-  state: GameState
-) => {
-  layers.forEach((layer) => {
-    layer.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
-  });
-  state.drawers.forEach((drawer) => drawer(layers, state));
-
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  layers.forEach((layer) => ctx.drawImage(layer.canvas, 0, 0));
 };
 
 export const GameContext = React.createContext<GameStore>([{}, () => {}]);
