@@ -6,7 +6,7 @@ export type Drawable = {
   layer: number;
 }
 
-type DrawableEntity = Entity & Position & Drawable;
+export type DrawableEntity = Entity & Position & Drawable;
 
 export type Circle = DrawableEntity & {
   radius: number;

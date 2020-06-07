@@ -17,6 +17,7 @@ import {
   polygonSystem,
   Polygon,
   DrawableSystem,
+  DrawableEntity,
 } from "~/engine";
 
 type Laser = GameEntity & {
@@ -32,6 +33,10 @@ type Ship = Polygon & {
   canShoot: boolean;
   lasers: Laser[];
 };
+
+export function isShip(entity: DrawableEntity): entity is Ship {
+  return (entity as Ship).lasers !== undefined;
+}
 
 type Particle = {
   x: number;
@@ -234,34 +239,13 @@ const isGameOver = (state: AsteroidsState): boolean => state.lives === 0;
 const isSpawning = (state: AsteroidsState): boolean =>
   getShip(state).blinkNum > 0;
 
-/*
-const drawShip: Drawer = (ctxs, state, color = "white") => {
-  const {
-    x,
-    y,
-    angle,
-    layer,
-    offsets,
-    radius,
-    ...ship
-  } = (state as AsteroidsState).ship;
-  const ctx = ctxs[layer];
-
-  if (ship.blinkNum === 0 || ship.blinkNum % 2 === 0) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = SHIP_SIZE / 20;
-
-    drawPolygon(ctx, x, y, radius - 7, angle, offsets);
-
-    if (SHOW_BOUNDING) {
-      ctx.strokeStyle = "lime";
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2, false);
-      ctx.stroke();
-    }
-  }
+const drawShip = (showBounding: boolean): DrawableSystem => {
+  const drawPolygon = polygonSystem(SHOW_BOUNDING);
+  return (entity, layer) => {
+  if (isShip(entity) && (entity.blinkNum === 0 || entity.blinkNum % 2 === 0)) {
+    drawPolygon(entity, layer);
+  }};
 };
-*/
 
 const drawParticle = (ctx: CanvasRenderingContext2D, state: Particle) => {
   ctx.beginPath();
@@ -363,7 +347,9 @@ const rotateLeft = (state: AsteroidsState): AsteroidsState => {
   const ship = getShip(state);
   return {
     ...state,
-    entities: [{ ...ship, rotation: ((TURN_SPEED / 180) * Math.PI) / FPS } as Ship],
+    entities: [
+      { ...ship, rotation: ((TURN_SPEED / 180) * Math.PI) / FPS } as Ship,
+    ],
   };
 };
 
@@ -371,7 +357,9 @@ const rotateRight = (state: AsteroidsState): AsteroidsState => {
   const ship = getShip(state);
   return {
     ...state,
-    entities: [{ ...ship, rotation: ((-TURN_SPEED / 180) * Math.PI) / FPS } as Ship],
+    entities: [
+      { ...ship, rotation: ((-TURN_SPEED / 180) * Math.PI) / FPS } as Ship,
+    ],
   };
 };
 
@@ -403,13 +391,15 @@ const shootLaser = (state: AsteroidsState): AsteroidsState => {
   const ship = getShip(state);
   return {
     ...state,
-    entities: [ship.canShoot
-    ? {
-        ...ship,
-        lasers: ship.lasers.concat(createLaser(state)),
-        canShoot: false,
-      } as Ship
-    : ship]
+    entities: [
+      ship.canShoot
+        ? ({
+            ...ship,
+            lasers: ship.lasers.concat(createLaser(state)),
+            canShoot: false,
+          } as Ship)
+        : ship,
+    ],
   };
 };
 
@@ -436,19 +426,21 @@ const moveShip = (state: AsteroidsState): AsteroidsState => {
 
   return {
     ...state,
-    entities: [{
-      ...ship,
-      x: x < leftCorner ? rightCorner : x > rightCorner ? leftCorner : x,
-      y: y < topCorner ? bottomCorner : y > bottomCorner ? topCorner : y,
-      angle,
-      // offsets: angle !== ship.angle ? rotatePolygon(angle, ship.offsets) : ship.offsets,
-      xVelocity: ship.thrusting
-        ? ship.xVelocity + (SHIP_THRUST * Math.cos(angle)) / FPS
-        : ship.xVelocity - (FRICTION * ship.xVelocity) / FPS,
-      yVelocity: ship.thrusting
-        ? ship.yVelocity - (SHIP_THRUST * Math.sin(angle)) / FPS
-        : ship.yVelocity - (FRICTION * ship.yVelocity) / FPS,
-    } as Ship],
+    entities: [
+      {
+        ...ship,
+        x: x < leftCorner ? rightCorner : x > rightCorner ? leftCorner : x,
+        y: y < topCorner ? bottomCorner : y > bottomCorner ? topCorner : y,
+        angle,
+        // offsets: angle !== ship.angle ? rotatePolygon(angle, ship.offsets) : ship.offsets,
+        xVelocity: ship.thrusting
+          ? ship.xVelocity + (SHIP_THRUST * Math.cos(angle)) / FPS
+          : ship.xVelocity - (FRICTION * ship.xVelocity) / FPS,
+        yVelocity: ship.thrusting
+          ? ship.yVelocity - (SHIP_THRUST * Math.sin(angle)) / FPS
+          : ship.yVelocity - (FRICTION * ship.yVelocity) / FPS,
+      } as Ship,
+    ],
   };
 };
 
@@ -484,18 +476,20 @@ const blinkShip = (state: AsteroidsState): AsteroidsState => {
   const ship = getShip(state);
   return {
     ...state,
-    entities: [{
-      ...ship,
-      // reduce blink time and num
-      blinkTime:
-        ship.blinkTime === 0
-          ? Math.ceil(SHIP_BLINK_DURATION * FPS)
-          : ship.blinkTime - 1,
-      blinkNum:
-        ship.blinkTime === 0 && ship.blinkNum > 0
-          ? ship.blinkNum - 1
-          : ship.blinkNum,
-    } as Ship],
+    entities: [
+      {
+        ...ship,
+        // reduce blink time and num
+        blinkTime:
+          ship.blinkTime === 0
+            ? Math.ceil(SHIP_BLINK_DURATION * FPS)
+            : ship.blinkTime - 1,
+        blinkNum:
+          ship.blinkTime === 0 && ship.blinkNum > 0
+            ? ship.blinkNum - 1
+            : ship.blinkNum,
+      } as Ship,
+    ],
   };
 };
 
@@ -592,10 +586,12 @@ const checkLaserCollision = (state: AsteroidsState): AsteroidsState => {
     ? {
         ...state,
         asteroids: removeAsteroid(asteroids, hitAsteroid, level),
-        entities: [{
-          ...ship,
-          lasers: removeLaser(hitAsteroid, ship),
-        } as Ship],
+        entities: [
+          {
+            ...ship,
+            lasers: removeLaser(hitAsteroid, ship),
+          } as Ship,
+        ],
         explosions: state.explosions.concat(explosion || []),
         score: state.score + POINTS[hitAsteroid.stage - 1],
       }
@@ -618,10 +614,12 @@ const moveLasers = (state: AsteroidsState): AsteroidsState => {
 
   return {
     ...state,
-    entities: [{
-      ...ship,
-      lasers: ship.lasers.reduce(moveIfOnBoard, []),
-    } as Ship],
+    entities: [
+      {
+        ...ship,
+        lasers: ship.lasers.reduce(moveIfOnBoard, []),
+      } as Ship,
+    ],
   };
 };
 
@@ -801,7 +799,7 @@ const createAsteroidsState = (): AsteroidsState => {
     asteroids: createAsteroidBelt(level, ship),
     explosions: [],
     drawers: [drawBelt, drawLasers, drawExplosions],
-    renders: [polygonSystem(SHOW_BOUNDING)],
+    renders: [drawShip(SHOW_BOUNDING)],
     entities: [ship],
   };
 };
