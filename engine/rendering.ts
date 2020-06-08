@@ -73,8 +73,9 @@ export const drawPolygon = (
 
 export const polygonSystem = (showBounding: boolean): DrawableSystem => (entity, layer) => {
   if (isPolygon(entity)) {
-    const { x, y, radius, angle, points} = entity;
-    drawPolygon(layer, x, y, radius - 7, angle, points);
+    const { x, y, radius, angle, points, lineColor, lineWidth} = entity;
+    drawPolygon(layer, x, y, radius - 7, angle, points, lineColor, lineWidth);
+
     if (showBounding) {
       layer.strokeStyle = "lime";
       layer.beginPath();
