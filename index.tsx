@@ -18,6 +18,8 @@ import {
   Polygon,
   DrawableSystem,
   DrawableEntity,
+  drawPolygon,
+  Point,
 } from "~/engine";
 
 type Laser = GameEntity & {
@@ -62,6 +64,7 @@ type Explosion = {
 type Asteroid = GameEntity & {
   angle: number;
   offsets: number[];
+  points: Point[];
   stage: number; // used to determine the size
 };
 
@@ -178,6 +181,17 @@ const createAsteroid = (
     Math.random() * (ASTEROIDS_VERT + 1) + ASTEROIDS_VERT / 2
   );
 
+  const offsets = Array.from(
+    { length },
+    () => Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG
+  );
+
+  const vert = offsets.length;
+  const points = offsets.map((offset, j) => [
+    offset * Math.cos(angle + (j * Math.PI * 2) / vert),
+    offset * Math.sin(angle + (j * Math.PI * 2) / vert)
+  ] as Point);
+
   return {
     x: x,
     y: y,
@@ -191,10 +205,8 @@ const createAsteroid = (
     radius: Math.ceil(ASTEROIDS_SIZE[stage - 1] / 2),
     angle,
     stage,
-    offsets: Array.from(
-      { length },
-      () => Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG
-    ),
+    offsets,
+    points
   };
 };
 
@@ -210,7 +222,9 @@ const createAsteroidBelt = (level: number, ship: Ship): Asteroid[] => {
         distBetweenPoints(ship.x, ship.y, x, y) <
         ASTEROIDS_SIZE[0] * 2 + ship.radius
       );
-      return createAsteroid(x, y, level);
+      const asteroid = createAsteroid(x, y, level);
+      console.dir(asteroid.offsets)
+      return asteroid;
     });
 };
 
@@ -242,9 +256,13 @@ const isSpawning = (state: AsteroidsState): boolean =>
 const drawShip = (showBounding: boolean): DrawableSystem => {
   const drawPolygon = polygonSystem(SHOW_BOUNDING);
   return (entity, layer) => {
-  if (isShip(entity) && (entity.blinkNum === 0 || entity.blinkNum % 2 === 0)) {
-    drawPolygon(entity, layer);
-  }};
+    if (
+      isShip(entity) &&
+      (entity.blinkNum === 0 || entity.blinkNum % 2 === 0)
+    ) {
+      drawPolygon(entity, layer);
+    }
+  };
 };
 
 const drawParticle = (ctx: CanvasRenderingContext2D, state: Particle) => {
@@ -294,6 +312,16 @@ const drawLasers: Drawer = (ctxs, state) => {
 
 const drawBelt: Drawer = (ctxs, state) => {
   // asteroids
+  (state as AsteroidsState).asteroids.forEach(
+    ({ x, y, radius, angle, points, layer }) => {
+      drawPolygon(ctxs[layer], x, y, radius, angle, points);
+    }
+  );
+};
+
+/*
+const drawBelt: Drawer = (ctxs, state) => {
+  // asteroids
 
   (state as AsteroidsState).asteroids.forEach(
     ({ x, y, radius, angle, offsets, layer }, i) => {
@@ -328,7 +356,7 @@ const drawBelt: Drawer = (ctxs, state) => {
     }
   );
 };
-
+*/
 const drawGameOver: Drawer = (ctxs, state) => {
   const ctx = ctxs[0];
   ctx.fillStyle = "black";

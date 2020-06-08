@@ -42,7 +42,7 @@ const rotatePolygon = (angle: number, offsets: Point[]): Point[] => {
   ]);
 };
 
-const drawPolygon = (
+export const drawPolygon = (
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
