@@ -6,7 +6,6 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import {
   GameStateProvider,
-  GameEntity,
   GameState,
   GameReducer,
   KeyHandlers,
@@ -19,9 +18,10 @@ import {
   DrawableSystem,
   DrawableEntity,
   Point,
-} from "~/engine";
+  applyVelocity,
+} from "./engine";
 
-type Laser = GameEntity & {
+type Laser = DrawableEntity & {
   distTravelled: number;
   explodeTime: number;
 };
@@ -115,7 +115,7 @@ function random(min: number, max: number) {
   return Math.random() * (max - min) + min;
 }
 
-const circleCollision = (obj1: GameEntity, obj2: GameEntity) => {
+const circleCollision = (obj1: DrawableEntity, obj2: DrawableEntity) => {
   const radiusSum = obj1.radius + obj2.radius;
   const xDiff = obj1.x - obj2.x;
   const yDiff = obj1.y - obj2.y;
@@ -303,17 +303,6 @@ const drawLasers: Drawer = (ctxs, state) => {
   });
 };
 
-/*
-const drawBelt: Drawer = (ctxs, state) => {
-  // asteroids
-  (state as AsteroidsState).asteroids.forEach(
-    ({ x, y, radius, angle, points, layer }) => {
-      drawPolygon(ctxs[layer], x, y, radius, angle, points);
-    }
-  );
-};
-*/
-
 const drawGameOver: Drawer = (ctxs, state) => {
   const ctx = ctxs[0];
   ctx.fillStyle = "black";
@@ -387,8 +376,11 @@ const enableLaser = ({ ship, ...state }: AsteroidsState): AsteroidsState => {
 const moveShip = ({ ship, ...state }: AsteroidsState): AsteroidsState => {
   const angle = ship.angle + ship.rotation;
 
-  const x = ship.x + ship.xVelocity;
-  const y = ship.y + ship.yVelocity;
+  const x = ship.x;
+  const y = ship.y;
+
+  // const x = ship.x + ship.xVelocity;
+  // const y = ship.y + ship.yVelocity;
 
   // handle edge of the board
   const leftCorner = 0 - ship.radius;
@@ -588,10 +580,11 @@ const moveAsteroids = (state: AsteroidsState): AsteroidsState => {
   const { asteroids } = state;
 
   const moveAsteroid = (asteroid: Asteroid): Asteroid => {
-    const { radius, xVelocity, yVelocity } = asteroid;
+    const { radius, x, y } = asteroid;
+    // const { radius, xVelocity, yVelocity } = asteroid;
 
-    const x = asteroid.x + xVelocity;
-    const y = asteroid.y + yVelocity;
+    // const x = asteroid.x + xVelocity;
+    // const y = asteroid.y + yVelocity;
 
     // handle edge of the board
     const leftCorner = 0 - radius;
@@ -630,7 +623,7 @@ const gameOverDrawers = (state: AsteroidsState): AsteroidsState => {
   };
 };
 
-const updateEntities = (state: AsteroidsState): AsteroidsState => {
+const setEntities = (state: AsteroidsState): AsteroidsState => {
   return {
     ...state,
     entities: [...state.asteroids, state.ship],
@@ -638,10 +631,10 @@ const updateEntities = (state: AsteroidsState): AsteroidsState => {
 };
 
 const gameLoop = (state: AsteroidsState): AsteroidsState => {
-  return (isGameOver(state)
+  const newState = (isGameOver(state)
     ? [animateExplosions, gameOverDrawers]
     : isSpawning(state)
-    ? [blinkShip, moveAsteroids, animateExplosions, updateEntities]
+    ? [blinkShip, moveAsteroids, animateExplosions]
     : [
         moveShip,
         moveLasers,
@@ -650,9 +643,10 @@ const gameLoop = (state: AsteroidsState): AsteroidsState => {
         checkLaserCollision,
         checkLevelCompleted,
         animateExplosions,
-        updateEntities,
       ]
   ).reduce((prev, transducer) => transducer(prev), state);
+
+  return setEntities(newState);
 };
 
 const reducer: GameReducer = (gameState, action) => {
@@ -769,6 +763,7 @@ const createAsteroidsState = (): AsteroidsState => {
     explosions: [],
     drawers: [drawLasers, drawExplosions],
     renders: [drawShip(SHOW_BOUNDING)],
+    systems: [applyVelocity],
     ship,
     entities: [],
   };

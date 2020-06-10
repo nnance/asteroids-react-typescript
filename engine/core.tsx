@@ -1,6 +1,6 @@
 import React, { CSSProperties } from "react";
-import { drawBoard } from "~/engine/rendering";
-import { GameState } from "~/engine/types";
+import { drawBoard } from "./rendering";
+import { GameState, Entity, SystemEntity } from "./types";
 
 export enum GameActions {
   rotateRight,
@@ -50,6 +50,20 @@ const createLayers = (width: number, height: number) => {
   return layers.filter((_) => _ !== null) as CanvasRenderingContext2D[];
 };
 
+const updateEntities = (state: GameState): GameState => {
+  return {
+    ...state,
+    entities: state.entities.map((entity) =>
+      state.systems.reduce((prev, system) => system(prev as Entity), entity)
+    ),
+  };
+};
+
+const coreReducer = (reducer: GameReducer): GameReducer => (gameState, action) => {
+  const updatedState = updateEntities(gameState);
+  return reducer(updatedState, action);
+};
+
 export const GameContext = React.createContext<GameStore>([{}, () => {}]);
 
 export const GameStateProvider: React.FC<GameProviderProps> = ({
@@ -57,7 +71,7 @@ export const GameStateProvider: React.FC<GameProviderProps> = ({
   state,
   children,
 }) => {
-  const store: GameStore = React.useReducer(reducer, state);
+  const store: GameStore = React.useReducer(coreReducer(reducer), state);
   return <GameContext.Provider value={store}>{children}</GameContext.Provider>;
 };
 

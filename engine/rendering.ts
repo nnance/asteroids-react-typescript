@@ -1,39 +1,10 @@
-import { GameState, Entity, Position, SystemEntity } from "~/engine/types";
-
-export type Point = [number, number];
-
-export type Drawable = {
-  layer: number;
-}
-
-export type DrawableEntity = Entity & Position & Drawable;
-
-export type Circle = DrawableEntity & {
-  radius: number;
-}
-
-export type Polygon = DrawableEntity & {
-  points: Point[];
-  scale: number;
-  angle: number;
-  lineWidth?: number;
-  lineColor?: string;
-  fillColor?: string;
-};
-
-export type DrawableSystem = (entity: DrawableEntity, layer: CanvasRenderingContext2D) => void;
-
-export function isCircle(entity: DrawableEntity): entity is Circle {
-  return (entity as Circle).radius !== undefined;
-}
-
-export function isPolygon(entity: DrawableEntity): entity is Polygon {
-  return (entity as Polygon).points !== undefined;
-}
-
-export function isDrawable(entity: SystemEntity | DrawableEntity): entity is DrawableEntity {
-  return (entity as DrawableEntity).layer !== undefined;
-}
+import {
+  GameState,
+  Point,
+  DrawableSystem,
+  isPolygon,
+  isDrawable,
+} from "./types";
 
 const rotatePolygon = (angle: number, offsets: Point[]): Point[] => {
   return offsets.map((offset) => [
@@ -71,9 +42,12 @@ export const drawPolygon = (
   ctx.stroke();
 };
 
-export const polygonSystem = (showBounding: boolean): DrawableSystem => (entity, layer) => {
+export const polygonSystem = (showBounding: boolean): DrawableSystem => (
+  entity,
+  layer
+) => {
   if (isPolygon(entity)) {
-    const { x, y, radius, angle, points, lineColor, lineWidth} = entity;
+    const { x, y, radius, angle, points, lineColor, lineWidth } = entity;
     drawPolygon(layer, x, y, radius - 7, angle, points, lineColor, lineWidth);
 
     if (showBounding) {
@@ -83,7 +57,7 @@ export const polygonSystem = (showBounding: boolean): DrawableSystem => (entity,
       layer.stroke();
     }
   }
-}
+};
 
 export const drawBoard = (
   ctx: CanvasRenderingContext2D,
@@ -95,9 +69,12 @@ export const drawBoard = (
   });
 
   state.drawers.forEach((drawer) => drawer(layers, state));
-  state.renders.forEach((render) => state.entities.forEach((entity) => {
-    if (isDrawable(entity)) render(entity, layers[entity.layer]);
-  }));
+  
+  state.renders.forEach((render) =>
+    state.entities.forEach((entity) => {
+      if (isDrawable(entity)) render(entity, layers[entity.layer]);
+    })
+  );
 
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   layers.forEach((layer) => ctx.drawImage(layer.canvas, 0, 0));
